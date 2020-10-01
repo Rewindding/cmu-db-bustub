@@ -60,9 +60,21 @@ class LRUReplacer : public Replacer {
   // capacity
   size_t _capacity=0;
 
-  Linked_list* front,*rear;
+  Linked_list* front=nullptr,*rear=nullptr;
 
   std::unordered_map<frame_id_t,Linked_list*> map;
+  //remove from list but not delete
+  void RemoveNode(Linked_list* node){
+    node->left->right=node->right;
+    node->right->left=node->left;
+  }
+  //push a node to the back
+  void PushBack(Linked_list* node){
+    node->left=rear->left;
+    rear->left->right=node;
+    node->right=rear;
+    rear->left=node;
+  }
 };
 
 }  // namespace bustub
