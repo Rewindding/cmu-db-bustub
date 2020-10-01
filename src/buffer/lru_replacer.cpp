@@ -11,7 +11,7 @@
 //===----------------------------------------------------------------------===//
 
 #include "buffer/lru_replacer.h"
-
+#include "common/logger.h"
 
 /**
  * maybe some concurrency control issue not handled
@@ -41,8 +41,7 @@ bool LRUReplacer::Victim(frame_id_t *frame_id) {
     }
     *frame_id=least_used->data;
     //delete the node
-    least_used->left->right=least_used->right;
-    least_used->right=least_used->left;
+    RemoveNode(least_used);
     map.erase(least_used->data);
     delete least_used;
     return true;
@@ -54,8 +53,7 @@ void LRUReplacer::Pin(frame_id_t frame_id) {
     if(!map.count(frame_id)) return;//frame not in the replacer
     auto pined_frame=map[frame_id];
     //remove the node from list
-    pined_frame->left->right=pined_frame->right;
-    pined_frame->right->left=pined_frame->left;
+    RemoveNode(pined_frame);
     map.erase(frame_id);
     delete pined_frame;
 }
@@ -64,12 +62,11 @@ void LRUReplacer::Unpin(frame_id_t frame_id) {
     //capacity full
     if(Size()==_capacity) return;
     Linked_list* node=NULL;
-    if(map.count(frame_id)) node=map[frame_id];
+    if(map.count(frame_id)) {
+        return;//already unpined!
+    }
     else node=new Linked_list(frame_id);
-    node->left=rear->left;
-    rear->left->right=node;
-    node->right=rear;
-    rear->left=node;
+    PushBack(node);
     map[frame_id]=node;
 }
 
