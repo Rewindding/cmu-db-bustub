@@ -135,7 +135,7 @@ void B_PLUS_TREE_INTERNAL_PAGE_TYPE::MoveHalfTo(BPlusTreeInternalPage *recipient
   // don't forget update their parent_page_id!
   for(int i=GetSize()-s;i<GetSize();++i){
     Page* child_page=buffer_pool_manager->FetchPage(array[i].second);
-    auto child_page_node = reinterpret_cast<BPlusTreePage* >(child_page->GetData());//cast to in mem object
+    auto child_page_node = reinterpret_cast<B_PLUS_TREE_INTERNAL_PAGE_TYPE*>(child_page->GetData());//cast to in mem object
     child_page_node->SetParentPageId(recipient->GetPageId());
     buffer_pool_manager->UnpinPage(child_page_node->GetPageId(),true);
   }
@@ -195,7 +195,7 @@ void B_PLUS_TREE_INTERNAL_PAGE_TYPE::MoveAllTo(BPlusTreeInternalPage *recipient,
                                                BufferPoolManager *buffer_pool_manager) {
   //how to update relevent key & value parin in its parent page?
   auto parnet_page = buffer_pool_manager->FetchPage(GetParentPageId());
-  auto parent_node = reinterpret_cast<BPlusTreeInternalPage*>(parnet_page->GetData());
+  auto parent_node = reinterpret_cast<B_PLUS_TREE_INTERNAL_PAGE_TYPE*>(parnet_page->GetData());
   //move the parent key down
   SetKeyAt(0,parent_node->KeyAt(index_in_parent));
   buffer_pool_manager->UnpinPage(parent_node->GetPageId(),false);
@@ -203,7 +203,7 @@ void B_PLUS_TREE_INTERNAL_PAGE_TYPE::MoveAllTo(BPlusTreeInternalPage *recipient,
   //update child page's parent_page_id property
   for(int i=0;i<GetSize();++i){
     auto page=buffer_pool_manager->FetchPage(array[i].second);
-    auto page_node=reinterpret_cast<BPlusTreeInternalPage*>(page->GetData());
+    auto page_node=reinterpret_cast<B_PLUS_TREE_INTERNAL_PAGE_TYPE*>(page->GetData());
     page_node->SetParentPageId(recipient->GetPageId());
     buffer_pool_manager->UnpinPage(page_node->GetPageId(),true);
   }
@@ -232,7 +232,7 @@ void B_PLUS_TREE_INTERNAL_PAGE_TYPE::MoveFirstToEndOf(BPlusTreeInternalPage *rec
                                                       BufferPoolManager *buffer_pool_manager) {
   //why should got to the parent page to fetch the key?
   Page* parent_page = buffer_pool_manager->FetchPage(GetPageId());
-  BPlusTreeInternalPage* parent_node = reinterpret_cast<BPlusTreeInternalPage*>(parent_page->GetData());
+  BPlusTreeInternalPage* parent_node = reinterpret_cast<B_PLUS_TREE_INTERNAL_PAGE_TYPE*>(parent_page->GetData());
   auto key=parent_node->ValueIndex(GetPageId());
   MappingType pair=std::make_pair(parent_node->KeyAt(key),array[0].second);
   recipient->CopyLastFrom(pair,buffer_pool_manager);
@@ -246,7 +246,7 @@ void B_PLUS_TREE_INTERNAL_PAGE_TYPE::CopyLastFrom(const MappingType &pair, Buffe
   array[GetSize()]=pair;
   IncreaseSize(1);
   Page* child_page = buffer_pool_manager->FetchPage(pair.second);
-  auto child_node = reinterpret_cast<BPlusTreeInternalPage*>(child_page->GetData());
+  auto child_node = reinterpret_cast<B_PLUS_TREE_INTERNAL_PAGE_TYPE*>(child_page->GetData());
   child_node->SetParentPageId(GetPageId());
   buffer_pool_manager->UnpinPage(child_node->GetPageId(),true);
 }
@@ -266,7 +266,7 @@ INDEX_TEMPLATE_ARGUMENTS
 void B_PLUS_TREE_INTERNAL_PAGE_TYPE::CopyFirstFrom(const MappingType &pair, int parent_index,
                                                    BufferPoolManager *buffer_pool_manager) {
   Page* parent_page=buffer_pool_manager->FetchPage(GetParentPageId());
-  BPlusTreeInternalPage* parent_node=reinterpret_cast<BPlusTreeInternalPage*>(parent_page->GetData());
+  BPlusTreeInternalPage* parent_node=reinterpret_cast<B_PLUS_TREE_INTERNAL_PAGE_TYPE*>(parent_page->GetData());
   array[0].first=parent_node->KeyAt(parent_index);
   //memmove(array+1,array,GetSize()*sizeof(pair));
   for(int i=GetSize();i>0;--i){
@@ -276,7 +276,7 @@ void B_PLUS_TREE_INTERNAL_PAGE_TYPE::CopyFirstFrom(const MappingType &pair, int 
   parent_node->SetKeyAt(parent_index,pair.first);
 
   Page* child_page=buffer_pool_manager->FetchPage(pair.second);
-  BPlusTreeInternalPage* child_node=reinterpret_cast<BPlusTreeInternalPage*>(child_page->GetData());
+  BPlusTreeInternalPage* child_node=reinterpret_cast<B_PLUS_TREE_INTERNAL_PAGE_TYPE*>(child_page->GetData());
   child_node->SetPageId(GetPageId());
 
   buffer_pool_manager->UnpinPage(GetParentPageId(),true);
