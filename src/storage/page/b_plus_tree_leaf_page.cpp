@@ -51,7 +51,7 @@ INDEX_TEMPLATE_ARGUMENTS
 int B_PLUS_TREE_LEAF_PAGE_TYPE::KeyIndex(const KeyType &key, const KeyComparator &comparator) const { 
   int pos=0;
   for(;pos<GetSize();++pos){
-    if(array[pos].first>=key) return pos;
+    if(comparator(array[pos].first,key)>=0) return pos;
   }
   return pos;
  }
@@ -86,7 +86,7 @@ const MappingType &B_PLUS_TREE_LEAF_PAGE_TYPE::GetItem(int index) {
 INDEX_TEMPLATE_ARGUMENTS
 int B_PLUS_TREE_LEAF_PAGE_TYPE::Insert(const KeyType &key, const ValueType &value, const KeyComparator &comparator) {
   int pos=GetSize();
-  while(pos>0&&array[pos-1].first>=key){
+  while(pos>0&&comparator(array[pos-1].first,key)>=0){
     array[pos]=array[pos-1];
     --pos;
   }
@@ -132,10 +132,10 @@ bool B_PLUS_TREE_LEAF_PAGE_TYPE::Lookup(const KeyType &key, ValueType *value, co
   int l=0,r=GetSize()-1;
   while(l<r){
     int m=(l+r)>>1;
-    if(array[m].first<key){
+    if(comparator(array[m].first,key)<0){
       l=m+1;
     }
-    else if(array[m].first>key){
+    else if(comparator(array[m].first,key)>0){
       r=m-1;
     }
     else{
@@ -160,10 +160,10 @@ int B_PLUS_TREE_LEAF_PAGE_TYPE::RemoveAndDeleteRecord(const KeyType &key, const 
   int l=0,r=GetSize()-1;
   while(l<r){
     int m=(l+r)>>1;
-    if(array[m].first<key){
+    if(comparator(array[m].first,key)<0){
       l=m+1;
     }
-    else if(array[m].first>key){
+    else if(comparator(array[m].first,key)>0){
       r=m-1;
     }
     else{
@@ -217,8 +217,10 @@ void B_PLUS_TREE_LEAF_PAGE_TYPE::MoveFirstToEndOf(BPlusTreeLeafPage *recipient,
     array[i]=array[i+1];
   }
   Page* parent_page = buffer_pool_manager->FetchPage(GetParentPageId());
-  auto parent_node=reinterpret_cast<BPlusTreeInternalPage*>(parent_page->GetData());
-  parent_node->SetKeyAt(parent_node->ValueIndex(GetPageId()),array[0].first);
+  auto parent_node=reinterpret_cast<BPlusTreeInternalPage<KeyType, page_id_t,
+                                         KeyComparator> *>(parent_page->GetData());
+  auto key=parent_node->ValueIndex(GetPageId());
+  parent_node->SetKeyAt(key,array[0].first);
   buffer_pool_manager->UnpinPage(parent_page->GetPageId(),true);
   recipient->CopyLastFrom(pair);
 }
@@ -243,7 +245,7 @@ INDEX_TEMPLATE_ARGUMENTS
 void B_PLUS_TREE_LEAF_PAGE_TYPE::CopyFirstFrom(const MappingType &item, int parentIndex,
                                                BufferPoolManager *buffer_pool_manager) {
   Page* parent_page = buffer_pool_manager->FetchPage(GetParentPageId());
-  auto parent_node=reinterpret_cast<BPlusTreeInternalPage*>(parent_page->GetData());
+  auto parent_node=reinterpret_cast<B_PLUS_TREE_INTERNAL_PAGE_TYPE*>(parent_page->GetData());
   parent_node->SetKeyAt(parentIndex,item.first);
   buffer_pool_manager->UnpinPage(parent_page->GetPageId(),true);
   //memmove(array+1,array,sizeof(MappingType)*GetSize());
