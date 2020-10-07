@@ -245,7 +245,8 @@ INDEX_TEMPLATE_ARGUMENTS
 void B_PLUS_TREE_LEAF_PAGE_TYPE::CopyFirstFrom(const MappingType &item, int parentIndex,
                                                BufferPoolManager *buffer_pool_manager) {
   Page* parent_page = buffer_pool_manager->FetchPage(GetParentPageId());
-  auto parent_node=reinterpret_cast<B_PLUS_TREE_INTERNAL_PAGE_TYPE*>(parent_page->GetData());
+  auto parent_node=reinterpret_cast<BPlusTreeInternalPage<KeyType, page_id_t,
+                                         KeyComparator> *>(parent_page->GetData());
   parent_node->SetKeyAt(parentIndex,item.first);
   buffer_pool_manager->UnpinPage(parent_page->GetPageId(),true);
   //memmove(array+1,array,sizeof(MappingType)*GetSize());
