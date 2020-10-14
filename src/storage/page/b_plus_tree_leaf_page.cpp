@@ -163,7 +163,7 @@ bool B_PLUS_TREE_LEAF_PAGE_TYPE::Lookup(const KeyType &key, ValueType *value, co
 INDEX_TEMPLATE_ARGUMENTS
 int B_PLUS_TREE_LEAF_PAGE_TYPE::RemoveAndDeleteRecord(const KeyType &key, const KeyComparator &comparator) { 
   int l=0,r=GetSize()-1;
-  while(l<r){
+  while(l<=r){
     int m=(l+r)>>1;
     if(comparator(array[m].first,key)<0){
       l=m+1;
@@ -173,6 +173,7 @@ int B_PLUS_TREE_LEAF_PAGE_TYPE::RemoveAndDeleteRecord(const KeyType &key, const 
     }
     else{
       //memmove(array+m,array+m+1,sizeof(MappingType)*(GetSize()-m-1));
+      LOG_INFO("remove key index %d,page id:%d\n",m,GetPageId());
       for(int i=m;i<GetSize()-1;++i){
         array[i]=array[i+1];
       }
