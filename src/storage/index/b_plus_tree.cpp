@@ -67,6 +67,7 @@ bool BPLUSTREE_TYPE::Insert(const KeyType &key, const ValueType &value, Transact
   if(IsEmpty()){
     try{
       StartNewTree(key,value);
+      return true;
     }
     catch(const char* msg){
       return false;
@@ -166,6 +167,7 @@ void BPLUSTREE_TYPE::InsertIntoParent(BPlusTreePage *old_node, const KeyType &ke
     new_node->SetParentPageId(new_root->GetPageId());
     buffer_pool_manager_->UnpinPage(new_root->GetPageId(),true);
     //update root info
+    root_page_id_=new_root->GetPageId();
     UpdateRootPageId(0);
     return;
   }
@@ -191,7 +193,18 @@ void BPLUSTREE_TYPE::InsertIntoParent(BPlusTreePage *old_node, const KeyType &ke
  */
 INDEX_TEMPLATE_ARGUMENTS
 void BPLUSTREE_TYPE::Remove(const KeyType &key, Transaction *transaction) {
+  if(IsEmpty()) return;
+  auto leaf=FindLeafPage(key,true);
+  LeafPage* leaf_node=reinterpret_cast<LeafPage*> leaf_node(leaf->GetData());
+  int size = leaf_node->RemoveAndDeleteRecord(key,comparator_);
+  if(size<leaf_node->GetMinSize()){
+    //merge or redistribute
+    if(CoalesceOrRedistribute<LeafPage>(leaf_node)){
+      
+    } else {
 
+    }
+  }
 }
 
 /*
@@ -200,10 +213,50 @@ void BPLUSTREE_TYPE::Remove(const KeyType &key, Transaction *transaction) {
  * Using template N to represent either internal page or leaf page.
  * @return: true means target leaf page should be deleted, false means no
  * deletion happens
+ * return true means current node need to be merged to it's left sibling
+ * means this node should be deleted,but where should excute this delete ?
  */
 INDEX_TEMPLATE_ARGUMENTS
 template <typename N>
 bool BPLUSTREE_TYPE::CoalesceOrRedistribute(N *node, Transaction *transaction) {
+  if(node->IsRoot()){
+    if(AdjustRoot(node)){
+      buffer_pool_manager_->DeletePage(node->GetPageId());
+      return true;
+    } else {
+      return false;
+    }
+  }
+  //get the parent node
+  Page* parent_page=buffer_pool_manager_->FetchPage(node->GetParentPageId());
+  InternalPage* parent_node=reinterpret_cast<IntegerParentType*>(parent_page->GetData());
+  int parent_index = parent_node->ValueIndex(node->GetPageId());
+  //get the left and right sibling
+  N* left_sibling=nullptr,*right_sibling=nullptr;
+  if(parent_index-1>=0){
+    Page* left_page=buffer_pool_manager_->FetchPage(parent_node->ValueAt(parent_index-1));
+    left_sibling=reinterpret_cast<N*>(left_page->GetData());
+  }
+  if(parent_index+1 < parent_node->GetSize()){
+    Page* right_page = buffer_pool_manager_->FetchPage(parent_node->ValueAt(parent_index+1));
+    right_sibling = reinterpret_cast<N*>(right_page->GetData());
+  }
+  //get the max page size
+  int max_size_t=node->IsLeaf()?leaf_max_size_:internal_max_size_;
+  N* sibling=left_sibling!=nullptr?left_sibling:right_sibling;
+  //at least has one sibling
+  asserr(sibling!=nullptr);
+  if(sibling->GetSize()+node->GetSize()<=max_size_t){
+    //merge
+    bool res=sibling==left_sibling;
+    if(res) Coalesce<N>(&left_sibling,&node,&parent_node,parent_index);
+    else Coalesce<N>(&node,&right_sibling,&parent_node,parent_index);
+    return res;//this page has been merged to it's left sibling and deleted ,return true;
+  } else {
+    //redistribute
+    int index=(sibling==left_sibling)?1:0;
+    Redistribute<N>(sibling,node,index);
+  }
   return false;
 }
 
@@ -218,13 +271,25 @@ bool BPLUSTREE_TYPE::CoalesceOrRedistribute(N *node, Transaction *transaction) {
  * @param   parent             parent page of input "node"
  * @return  true means parent node should be deleted, false means no deletion
  * happend
+ * move all k-v from node to it's neighbor 
+ * node is always merged from right to it's left sibling
+ * return true means parent node underflow and xxxxx...
  */
 INDEX_TEMPLATE_ARGUMENTS
 template <typename N>
 bool BPLUSTREE_TYPE::Coalesce(N **neighbor_node, N **node,
                               BPlusTreeInternalPage<KeyType, page_id_t, KeyComparator> **parent, int index,
                               Transaction *transaction) {
-  return false;
+  auto neighbor_t=*neighbor_node,node_t=*node,parent_t=*parent;
+  node_t->MoveAllTo(neighbor_t,index,buffer_pool_manager_);
+  buffer_pool_manager_->DeletePage(node_t->GetPageId()); // delete here...
+  parent_t->Remove(index);
+  if(parent_t->GetSize()<parent_t->MinSize()){
+    //deal with parent size,return coalesceOrRedistribute()...
+    return CoalesceOrRedistribute(parent_t);
+  }else{
+    return false;
+  }
 }
 
 /*
@@ -238,7 +303,14 @@ bool BPLUSTREE_TYPE::Coalesce(N **neighbor_node, N **node,
  */
 INDEX_TEMPLATE_ARGUMENTS
 template <typename N>
-void BPLUSTREE_TYPE::Redistribute(N *neighbor_node, N *node, int index) {}
+void BPLUSTREE_TYPE::Redistribute(N *neighbor_node, N *node, int index) {
+  if(index==0){
+    neighbor_node->MoveFirstToEndOf(node,buffer_pool_manager_);
+  }
+  else{
+    neighbor_node->MoveLastToFrontOf(node,buffer_pool_manager_);
+  }
+}
 /*
  * Update root page if necessary
  * NOTE: size of root page can be less than min size and this method is only
@@ -250,7 +322,26 @@ void BPLUSTREE_TYPE::Redistribute(N *neighbor_node, N *node, int index) {}
  * happend
  */
 INDEX_TEMPLATE_ARGUMENTS
-bool BPLUSTREE_TYPE::AdjustRoot(BPlusTreePage *old_root_node) { return false; }
+bool BPLUSTREE_TYPE::AdjustRoot(BPlusTreePage *old_root_node) { 
+  int root_size=old_root_node->GetSize();
+  if(old_root_node->IsLeafPage()&&root_size==0) {
+    root_page_id_=INVALID_PAGE_ID;
+    UpdateRootPageId(false);
+    return true;
+  }
+  else if(!old_root_node->IsLeafPage()&&root_size==1) {
+    InternalPage* root_node=reinterpret_cast<InternalPage*>(old_root_node);
+    root_page_id_=root_node->ValueAt(0);
+    Page* new_root_page=buffer_pool_manager_->FetchPage(root_page_id_);
+    BPlusTreePage* new_root_node=reinterpret_cast<BPlusTreePage*>(new_root_page->GetData());
+    new_root_node->SetParentPageId(INVALID_PAGE_ID);
+    UpdateRootPageId(false);
+    buffer_pool_manager_->UnpinPage(root_page_id_,true);
+    return true;
+  } else {
+    return false;
+  }
+}
 
 /*****************************************************************************
  * INDEX ITERATOR
