@@ -240,8 +240,12 @@ void B_PLUS_TREE_LEAF_PAGE_TYPE::CopyLastFrom(const MappingType &item) {
  * update relavent key & value pair in its parent page.
  */
 INDEX_TEMPLATE_ARGUMENTS
-void B_PLUS_TREE_LEAF_PAGE_TYPE::MoveLastToFrontOf(BPlusTreeLeafPage *recipient, int parentIndex,
-                                                   BufferPoolManager *buffer_pool_manager) {
+void B_PLUS_TREE_LEAF_PAGE_TYPE::MoveLastToFrontOf(BPlusTreeLeafPage *recipient,BufferPoolManager *buffer_pool_manager) {
+  Page* parent_page=buffer_pool_manager->FetchPage(GetParentPageId());
+  auto parent_node=reinterpret_cast<BPlusTreeInternalPage<KeyType, page_id_t,
+                                         KeyComparator> *>(parent_page->GetData());
+  page_id_t parentIndex = parent_node->ValueIndex(GetPageId());
+  buffer_pool_manager->UnpinPage(parent_page->GetPageId(),false);
   recipient->CopyFirstFrom(array[GetSize()-1],parentIndex,buffer_pool_manager);
   IncreaseSize(-1);
 }

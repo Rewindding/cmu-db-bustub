@@ -257,8 +257,12 @@ void B_PLUS_TREE_INTERNAL_PAGE_TYPE::CopyLastFrom(const MappingType &pair, Buffe
  * page, then update relavent key & value pair in its parent page.
  */
 INDEX_TEMPLATE_ARGUMENTS
-void B_PLUS_TREE_INTERNAL_PAGE_TYPE::MoveLastToFrontOf(BPlusTreeInternalPage *recipient, int parent_index,
-                                                       BufferPoolManager *buffer_pool_manager) {
+void B_PLUS_TREE_INTERNAL_PAGE_TYPE::MoveLastToFrontOf(BPlusTreeInternalPage *recipient, BufferPoolManager *buffer_pool_manager) {
+  Page* parent_page=buffer_pool_manager->FetchPage(GetParentPageId());
+  auto parent_node=reinterpret_cast<BPlusTreeInternalPage<KeyType, page_id_t,
+                                         KeyComparator> *>(parent_page->GetData());
+  page_id_t parent_index = parent_node->ValueIndex(GetPageId())+1;//add one,recipient is the right sibling of current node
+  buffer_pool_manager->UnpinPage(parent_page->GetPageId(),false);
   recipient->CopyFirstFrom(array[GetSize()-1],parent_index,buffer_pool_manager);
   IncreaseSize(-1);
 }
