@@ -195,7 +195,7 @@ INDEX_TEMPLATE_ARGUMENTS
 void BPLUSTREE_TYPE::Remove(const KeyType &key, Transaction *transaction) {
   if(IsEmpty()) return;
   auto leaf=FindLeafPage(key,true);
-  LeafPage* leaf_node=reinterpret_cast<LeafPage*> leaf_node(leaf->GetData());
+  LeafPage* leaf_node=reinterpret_cast<LeafPage*>(leaf->GetData());
   int size = leaf_node->RemoveAndDeleteRecord(key,comparator_);
   if(size<leaf_node->GetMinSize()){
     //merge or redistribute
@@ -219,7 +219,7 @@ void BPLUSTREE_TYPE::Remove(const KeyType &key, Transaction *transaction) {
 INDEX_TEMPLATE_ARGUMENTS
 template <typename N>
 bool BPLUSTREE_TYPE::CoalesceOrRedistribute(N *node, Transaction *transaction) {
-  if(node->IsRoot()){
+  if(node->IsRootPage()){
     if(AdjustRoot(node)){
       buffer_pool_manager_->DeletePage(node->GetPageId());
       return true;
@@ -229,7 +229,7 @@ bool BPLUSTREE_TYPE::CoalesceOrRedistribute(N *node, Transaction *transaction) {
   }
   //get the parent node
   Page* parent_page=buffer_pool_manager_->FetchPage(node->GetParentPageId());
-  InternalPage* parent_node=reinterpret_cast<IntegerParentType*>(parent_page->GetData());
+  InternalPage* parent_node=reinterpret_cast<InternalPage*>(parent_page->GetData());
   int parent_index = parent_node->ValueIndex(node->GetPageId());
   //get the left and right sibling
   N* left_sibling=nullptr,*right_sibling=nullptr;
@@ -242,10 +242,10 @@ bool BPLUSTREE_TYPE::CoalesceOrRedistribute(N *node, Transaction *transaction) {
     right_sibling = reinterpret_cast<N*>(right_page->GetData());
   }
   //get the max page size
-  int max_size_t=node->IsLeaf()?leaf_max_size_:internal_max_size_;
+  int max_size_t=node->IsLeafPage()?leaf_max_size_:internal_max_size_;
   N* sibling=left_sibling!=nullptr?left_sibling:right_sibling;
   //at least has one sibling
-  asserr(sibling!=nullptr);
+  assert(sibling!=nullptr);
   if(sibling->GetSize()+node->GetSize()<=max_size_t){
     //merge
     bool res=sibling==left_sibling;
@@ -284,12 +284,11 @@ bool BPLUSTREE_TYPE::Coalesce(N **neighbor_node, N **node,
   node_t->MoveAllTo(neighbor_t,index,buffer_pool_manager_);
   buffer_pool_manager_->DeletePage(node_t->GetPageId()); // delete here...
   parent_t->Remove(index);
-  if(parent_t->GetSize()<parent_t->MinSize()){
+  if(parent_t->GetSize()<parent_t->GetMinSize()){
     //deal with parent size,return coalesceOrRedistribute()...
     return CoalesceOrRedistribute(parent_t);
-  }else{
-    return false;
   }
+  return false;
 }
 
 /*
