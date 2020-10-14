@@ -26,6 +26,7 @@ namespace bustub {
  */
 INDEX_TEMPLATE_ARGUMENTS
 void B_PLUS_TREE_INTERNAL_PAGE_TYPE::Init(page_id_t page_id, page_id_t parent_id, int max_size) {
+  SetPageType(IndexPageType::INTERNAL_PAGE);
   SetPageId(page_id);
   SetParentPageId(parent_id);
   SetMaxSize(max_size);
@@ -165,7 +166,7 @@ void B_PLUS_TREE_INTERNAL_PAGE_TYPE::CopyHalfFrom(MappingType *items, int size,
 INDEX_TEMPLATE_ARGUMENTS
 void B_PLUS_TREE_INTERNAL_PAGE_TYPE::Remove(int index) {
   //memmove(array+index,array+index+1,sizeof(MappingType)*(GetSize()-index-1));
-  for(int i=0;i<GetSize()-1;++i){
+  for(int i=index;i<GetSize()-2;++i){
     array[i]=array[i+1];
   }
   IncreaseSize(-1);
@@ -193,13 +194,13 @@ ValueType B_PLUS_TREE_INTERNAL_PAGE_TYPE::RemoveAndReturnOnlyChild() {
 INDEX_TEMPLATE_ARGUMENTS
 void B_PLUS_TREE_INTERNAL_PAGE_TYPE::MoveAllTo(BPlusTreeInternalPage *recipient, int index_in_parent,
                                                BufferPoolManager *buffer_pool_manager) {
-  //how to update relevent key & value parin in its parent page?
+  //how to update relevent key & value parin in its parent page? this function doesn't care
   auto parnet_page = buffer_pool_manager->FetchPage(GetParentPageId());
   auto parent_node = reinterpret_cast<B_PLUS_TREE_INTERNAL_PAGE_TYPE*>(parnet_page->GetData());
   //move the parent key down
   SetKeyAt(0,parent_node->KeyAt(index_in_parent));
   buffer_pool_manager->UnpinPage(parent_node->GetPageId(),false);
-  CopyAllFrom(array,GetSize(),buffer_pool_manager);
+  recipient->CopyAllFrom(array,GetSize(),buffer_pool_manager);
   //update child page's parent_page_id property
   for(int i=0;i<GetSize();++i){
     auto page=buffer_pool_manager->FetchPage(array[i].second);
