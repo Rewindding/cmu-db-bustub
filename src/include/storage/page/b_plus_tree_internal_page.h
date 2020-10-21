@@ -61,7 +61,7 @@ class BPlusTreeInternalPage : public BPlusTreePage {
   void CopyAllFrom(MappingType *items, int size, BufferPoolManager *buffer_pool_manager);
   void CopyLastFrom(const MappingType &pair, BufferPoolManager *buffer_pool_manager);
   void CopyFirstFrom(const MappingType &pair, int parent_index, BufferPoolManager *buffer_pool_manager);
-  //what's this??? can be treated as array, but what's the size?
+  // what's this??? can be treated as array, but what's the size?
   MappingType array[0];
 };
 }  // namespace bustub
