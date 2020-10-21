@@ -14,8 +14,8 @@
 #include <cstdio>
 #include <random>
 #include <string>
-#include "gtest/gtest.h"
 #include "common/logger.h"
+#include "gtest/gtest.h"
 
 namespace bustub {
 

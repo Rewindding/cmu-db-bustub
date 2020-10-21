@@ -13,8 +13,8 @@
 #include <utility>
 #include <vector>
 
-#include "storage/page/b_plus_tree_page.h"
 #include "common/logger.h"
+#include "storage/page/b_plus_tree_page.h"
 
 namespace bustub {
 
