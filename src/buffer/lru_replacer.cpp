@@ -35,6 +35,7 @@ LRUReplacer::~LRUReplacer() {
 bool LRUReplacer::Victim(frame_id_t *frame_id) {
   // how to konw the frame's pin counter is 0 or not??? track by it self
   // choose the list used page_frame_id and write it to the output parame
+  std::lock_guard<std::mutex> guard(latch_);
   auto least_used = front->right;
   if (least_used == rear) {
     return false;
@@ -50,6 +51,7 @@ bool LRUReplacer::Victim(frame_id_t *frame_id) {
 // It should remove the frame containing the pinned page from the LRUReplacer.
 // because pined page cann't be replaced!
 void LRUReplacer::Pin(frame_id_t frame_id) {
+  std::lock_guard<std::mutex> guard(latch_);
   if (map.count(frame_id) == 0U) {
     return;  // frame not in the replacer
   }
@@ -61,8 +63,9 @@ void LRUReplacer::Pin(frame_id_t frame_id) {
 }
 
 void LRUReplacer::Unpin(frame_id_t frame_id) {
+  std::lock_guard<std::mutex> guard(latch_);
   // capacity full
-  if (Size() == _capacity) {
+  if (map.size() == _capacity) {
     return;
   }
   Linked_list *node = nullptr;
@@ -77,6 +80,9 @@ void LRUReplacer::Unpin(frame_id_t frame_id) {
 // return the number of unpined frames?
 // this method returns the number of frames that are currently in the LRUReplacer.
 // the lRU replacer don't store pined pages
-size_t LRUReplacer::Size() { return map.size(); }
+size_t LRUReplacer::Size() {
+  std::lock_guard<std::mutex> guard(latch_);
+  return map.size();
+}
 
 }  // namespace bustub

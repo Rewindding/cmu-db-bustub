@@ -61,6 +61,8 @@ class LRUReplacer : public Replacer {
   Linked_list *front = nullptr, *rear = nullptr;
 
   std::unordered_map<frame_id_t, Linked_list *> map;
+
+  std::mutex latch_;
   // remove from list but not delete
   void RemoveNode(Linked_list *node) {
     node->left->right = node->right;
