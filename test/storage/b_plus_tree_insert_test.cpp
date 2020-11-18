@@ -57,6 +57,7 @@ TEST(BPlusTreeTests, InsertTest1) {
     auto location = (*iterator).second;
     EXPECT_EQ(location.GetPageId(), 0);
     EXPECT_EQ(location.GetSlotNum(), current_key);
+    // LOG_INFO("current key:%ld",current_key);
     current_key = current_key + 1;
   }
 
@@ -71,7 +72,7 @@ TEST(BPlusTreeTests, InsertTest1) {
   remove("test.log");
 }
 
-TEST(BPlusTreeTests, DISABLED_InsertTest2) {
+TEST(BPlusTreeTests, InsertTest2) {
   // create KeyComparator and index schema
   Schema *key_schema = ParseCreateStatement("a bigint");
   GenericComparator<8> comparator(key_schema);
