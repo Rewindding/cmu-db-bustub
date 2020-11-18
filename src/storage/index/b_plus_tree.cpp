@@ -438,10 +438,11 @@ INDEXITERATOR_TYPE BPLUSTREE_TYPE::end() {
   while(!btp->IsLeafPage()) {
     int rightMostIdx = btp->GetSize()-1;
     auto page_id = reinterpret_cast<InternalPage* >(btp)->ValueAt(rightMostIdx);
+    buffer_pool_manager_->UnpinPage(btp->GetPageId(),false);
     Page* p = buffer_pool_manager_->FetchPage(page_id);
-    btp = reinterpret_cast<BPlusTreePage* >(p->GetData()); 
+    btp = reinterpret_cast<BPlusTreePage* >(p->GetData());
   }
-  int rightMostIdx = btp->GetSize()-1;
+  int rightMostIdx = btp->GetSize();
   buffer_pool_manager_->UnpinPage(btp->GetPageId(),false);
   return INDEXITERATOR_TYPE(btp->GetPageId(),rightMostIdx,buffer_pool_manager_);
 }
