@@ -42,8 +42,10 @@ INDEXITERATOR_TYPE &INDEXITERATOR_TYPE::operator++() {
     B_PLUS_TREE_LEAF_PAGE_TYPE* leafPage = reinterpret_cast<B_PLUS_TREE_LEAF_PAGE_TYPE* >(page->GetData());
     ++kvIndex;
     if(kvIndex >= leafPage->GetSize()) {
-        kvIndex = 0;
-        leafPageId = leafPage->GetNextPageId();
+        if(leafPage->GetNextPageId()!=INVALID_PAGE_ID){
+            kvIndex = 0;
+            leafPageId = leafPage->GetNextPageId();
+        }
     }
     bufferPoolManager->UnpinPage(page->GetPageId(),false);
     return *this; // ???
