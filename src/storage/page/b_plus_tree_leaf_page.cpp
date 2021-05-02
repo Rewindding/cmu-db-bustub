@@ -90,23 +90,25 @@ const MappingType &B_PLUS_TREE_LEAF_PAGE_TYPE::GetItem(int index) {
 INDEX_TEMPLATE_ARGUMENTS
 int B_PLUS_TREE_LEAF_PAGE_TYPE::Insert(const KeyType &key, const ValueType &value, const KeyComparator &comparator) {
   int pos = GetSize();
-  int l=0,r=GetSize()-1;
-  while(l<=r) {
-    int m = (l+r)/2;
-    int d = comparator(array[m].first,key);
-    if (d==0){
+  int l = 0;
+  int r = GetSize() - 1;
+  while (l <= r) {
+    int m = (l + r) / 2;
+    int d = comparator(array[m].first, key);
+    if (d == 0) {
       // LOG_DEBUG("duplicate key:%lld",key.ToString());
       // duplicate key is not allowed
       return GetSize();
-    } else if(d>0) {
+    }
+    if (d > 0) {
       pos = m;
-      r=m-1;
+      r = m - 1;
     } else {
-      l=m+1;
+      l = m + 1;
     }
   }
-  for (int i=GetSize();i > pos;--i) {
-    array[i] = array[i-1];
+  for (int i = GetSize(); i > pos; --i) {
+    array[i] = array[i - 1];
   }
   array[pos] = {key, value};
   IncreaseSize(1);

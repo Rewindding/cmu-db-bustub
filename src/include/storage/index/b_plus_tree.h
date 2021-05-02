@@ -38,6 +38,7 @@ class BPlusTree {
   using InternalPage = BPlusTreeInternalPage<KeyType, page_id_t, KeyComparator>;
   using LeafPage = BPlusTreeLeafPage<KeyType, ValueType, KeyComparator>;
   using TreePage = BPlusTreePage;
+
  public:
   explicit BPlusTree(std::string name, BufferPoolManager *buffer_pool_manager, const KeyComparator &comparator,
                      int leaf_max_size = LEAF_PAGE_SIZE, int internal_max_size = INTERNAL_PAGE_SIZE);
@@ -87,9 +88,9 @@ class BPlusTree {
   void InsertIntoParent(BPlusTreePage *old_node, const KeyType &key, BPlusTreePage *new_node,
                         Transaction *transaction = nullptr);
 
-  bool optimisticInsert(const KeyType &key, const ValueType &value,Transaction* transaction);
+  bool optimisticInsert(const KeyType &key, const ValueType &value, Transaction *transaction);
 
-  bool concurrentInsert(const KeyType &key, const ValueType &value,Transaction* transaction);
+  bool concurrentInsert(const KeyType &key, const ValueType &value, Transaction *transaction);
   template <typename N>
   N *Split(N *node);
 
