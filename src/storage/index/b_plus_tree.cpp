@@ -69,6 +69,7 @@ bool BPLUSTREE_TYPE::GetValue(const KeyType &key, std::vector<ValueType> *result
  */
 INDEX_TEMPLATE_ARGUMENTS
 bool BPLUSTREE_TYPE::Insert(const KeyType &key, const ValueType &value, Transaction *transaction) {
+  // LOG_DEBUG("insert,key:%lld,value:%s",key.ToString(),value.ToString().c_str());
   bool inserted = optimisticInsert(key,value, transaction);
   if(!inserted) {
     return concurrentInsert(key,value,transaction);
@@ -85,26 +86,47 @@ bool BPLUSTREE_TYPE::optimisticInsert(const KeyType &key, const ValueType &value
     } catch (const char *msg) {
       // corner case : if the tree is empty and concurrent insert been called?
       if(strcmp(msg,"not empty tree") == 0) {
-        return InsertIntoLeaf(key,value);
+        // continue insert as a normal tree
+        // return InsertIntoLeaf(key,value);
+      } else {
+        return false;
       }
-      return false;
+
     }
   }
-  //0. find the leaf page
-  Page* leaf_page = FindLeafPage(key,true);
-  //1. get the write latch of this leaf page
-  leaf_page->WLatch();
+  //0. find the leaf treePage
+  Page* page = buffer_pool_manager_->FetchPage(root_page_id_);
+  BPlusTreePage* treePage = reinterpret_cast<BPlusTreePage*>(page->GetData());
 
+  while(!treePage->IsLeafPage()){
+    page->RLatch();
+    page_id_t childPid = reinterpret_cast<InternalPage *>(treePage)->Lookup(key,comparator_);
+    page->RUnlatch();
+
+    buffer_pool_manager_->UnpinPage(page->GetPageId(),false);
+
+    Page* childPage = buffer_pool_manager_->FetchPage(childPid);
+    // childPage->RLatch();
+    BPlusTreePage* childTreePage = reinterpret_cast<BPlusTreePage*>(childPage->GetData());
+
+    page = childPage;
+    treePage = childTreePage;
+  }
+  // 在child page没有lock的时候释放掉parent page的lock，会不会有危险？
+  //1. get the write latch of this leaf treePage
+  page->WLatch();
   //2. judge if will split
-  LeafPage * leaf_page_node = reinterpret_cast<LeafPage*>(leaf_page->GetData());
-  if(leaf_page_node->GetSize()==leaf_max_size_) {// should split!
-    leaf_page->WUnlatch();
+
+  if(treePage->GetSize()==leaf_max_size_) {// should split! optimistic insert failed.
+    page->WUnlatch();
+    buffer_pool_manager_->UnpinPage(page->GetPageId(), false);
     return false;
   }
   // don't need split
-  leaf_page_node->Insert(key,value,comparator_);
-  buffer_pool_manager_->UnpinPage(leaf_page_node->GetPageId(),true);
-  leaf_page->WUnlatch();
+  reinterpret_cast<LeafPage *>(treePage)->Insert(key,value,comparator_);
+  page->WUnlatch();
+  buffer_pool_manager_->UnpinPage(treePage->GetPageId(),true);
+  // LOG_DEBUG("opt insert,key:%lld\n",key.ToString());
   return true;
 }
 
@@ -117,7 +139,6 @@ bool BPLUSTREE_TYPE::concurrentInsert(const KeyType &key, const ValueType &value
   start_new_tree_mutex.lock();
   Page* root_page = buffer_pool_manager_->FetchPage(root_page_id_);
   // use a que to store ids of locked pages
-
   std::deque<Page* > wLockedPages;
   root_page->WLatch();
 
@@ -136,7 +157,6 @@ bool BPLUSTREE_TYPE::concurrentInsert(const KeyType &key, const ValueType &value
     start_new_tree_mutex.unlock();
   } else {
     unlock_start_new_tree = true;
-    // TODO unlock this mutex in the end of function
   }
   while(!current_node->IsLeafPage()) {
     // get the child page
@@ -149,7 +169,8 @@ bool BPLUSTREE_TYPE::concurrentInsert(const KeyType &key, const ValueType &value
     // judge if this page need split
     TreePage* child_node = reinterpret_cast<TreePage*>(child_page->GetData());
     int max_page_size = child_node->IsLeafPage() ? leaf_max_size_:internal_max_size_;
-    if(child_node->GetSize() < max_page_size) {
+
+    if(child_node->IsSafeForInsert()) {
       // this node is safe, release all the latches above (unlock and unpin)
       for(Page* p:wLockedPages) {
         p->WUnlatch();
@@ -175,6 +196,7 @@ bool BPLUSTREE_TYPE::concurrentInsert(const KeyType &key, const ValueType &value
   if(unlock_start_new_tree) {
     start_new_tree_mutex.unlock();
   }
+//  LOG_DEBUG("con insert,key:%lld\n",key.ToString());
   return true;
 }
 /*
