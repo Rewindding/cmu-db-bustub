@@ -73,7 +73,7 @@ Page *BufferPoolManager::FetchPageImpl(page_id_t page_id) {
   // 4.     Update P's metadata, read in the page content from disk, and then return a pointer to P.
   page.page_id_ = page_id;
   (pages_ + stale_frame)->pin_count_++;
-  disk_manager_->ReadPage(page_id, page.GetData());  
+  disk_manager_->ReadPage(page_id, page.GetData());
   return pages_ + stale_frame;
 }
 
