@@ -122,11 +122,12 @@ bool BPLUSTREE_TYPE::optimisticInsert(const KeyType &key, const ValueType &value
     return false;
   }
   // don't need split
-  reinterpret_cast<LeafPage *>(treePage)->Insert(key, value, comparator_);
+  int size = reinterpret_cast<LeafPage *>(treePage)->GetSize();
+  int insertSize = reinterpret_cast<LeafPage *>(treePage)->Insert(key, value, comparator_);
   page->WUnlatch();
   buffer_pool_manager_->UnpinPage(treePage->GetPageId(), true);
   // LOG_DEBUG("opt insert,key:%lld\n",key.ToString());
-  return true;
+  return size + 1 == insertSize;
 }
 
 // question :what happened if i lock a page and unpin this page?
