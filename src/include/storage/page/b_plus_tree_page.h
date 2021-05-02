@@ -65,6 +65,7 @@ class BPlusTreePage {
   bool IsSafeForInsert();
 
   bool IsSafeForDelete();
+
  private:
   // member variable, attributes that both internal and leaf page share
   IndexPageType page_type_ __attribute__((__unused__));

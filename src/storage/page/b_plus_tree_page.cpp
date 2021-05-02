@@ -58,10 +58,6 @@ void BPlusTreePage::SetPageId(page_id_t page_id) { page_id_ = page_id; }
  */
 void BPlusTreePage::SetLSN(lsn_t lsn) { lsn_ = lsn; }
 
-bool BPlusTreePage::IsSafeForInsert() {
-  return size_<GetMaxSize();
-}
-bool BPlusTreePage::IsSafeForDelete() {
-  return size_>GetMinSize();
-}
+bool BPlusTreePage::IsSafeForInsert() { return size_ < GetMaxSize(); }
+bool BPlusTreePage::IsSafeForDelete() { return size_ > GetMinSize(); }
 }  // namespace bustub
