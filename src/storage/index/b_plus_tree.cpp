@@ -43,7 +43,7 @@ bool BPLUSTREE_TYPE::IsEmpty() const { return root_page_id_ == INVALID_PAGE_ID; 
  */
 INDEX_TEMPLATE_ARGUMENTS
 bool BPLUSTREE_TYPE::GetValue(const KeyType &key, std::vector<ValueType> *result, Transaction *transaction) {
-  Page *leaf_page = FindLeafPage(key, true);
+  Page *leaf_page = FindLeafPage(key);
 
   if (leaf_page == nullptr) {
     return false;
@@ -70,18 +70,6 @@ bool BPLUSTREE_TYPE::GetValue(const KeyType &key, std::vector<ValueType> *result
 bool print = true;
 INDEX_TEMPLATE_ARGUMENTS
 bool BPLUSTREE_TYPE::Insert(const KeyType &key, const ValueType &value, Transaction *transaction) {
-  // LOG_DEBUG("insert,key:%lld,value:%s",key.ToString(),value.ToString().c_str());
-  if (print) {
-    LOG_DEBUG("print file");
-    print = false;
-    std::ifstream f("/autograder/bustub/test/storage/grading_b_plus_tree_checkpoint_1_test.cpp");
-    if (f.is_open()) {
-      std::cout << f.rdbuf();
-      std::cout << f.rdbuf();
-    } else {
-      LOG_DEBUG("f.is_open()=false");
-    }
-  }
   bool inserted = optimisticInsert(key, value, transaction);
   if (!inserted) {
     return concurrentInsert(key, value, transaction);
@@ -99,6 +87,7 @@ bool BPLUSTREE_TYPE::optimisticInsert(const KeyType &key, const ValueType &value
     } catch (const char *msg) {
       // corner case : if the tree is empty and concurrent insert been called?
       if (strcmp(msg, "not empty tree") == 0) {
+        LOG_DEBUG("call StartNewTree failed");
         // continue insert as a normal tree
         // return InsertIntoLeaf(key,value);
       } else {
@@ -129,7 +118,7 @@ bool BPLUSTREE_TYPE::optimisticInsert(const KeyType &key, const ValueType &value
   page->WLatch();
   // 2. judge if will split
 
-  if (treePage->GetSize() == leaf_max_size_) {  // should split! optimistic insert failed.
+  if (!treePage->IsSafeForInsert()) {  // should split! optimistic insert failed.
     page->WUnlatch();
     buffer_pool_manager_->UnpinPage(page->GetPageId(), false);
     return false;
@@ -197,7 +186,7 @@ bool BPLUSTREE_TYPE::concurrentInsert(const KeyType &key, const ValueType &value
   LeafPage *target_leaf_node = static_cast<LeafPage *>(current_node);
   int pageSize = target_leaf_node->GetSize();
   int insertSize = target_leaf_node->Insert(key, value, comparator_);
-  if (target_leaf_node->GetSize() > leaf_max_size_) {
+  if (target_leaf_node->GetSize() >= target_leaf_node->GetMaxSize()) {
     Split<LeafPage>(target_leaf_node);
   }
   // release all the latches
@@ -251,7 +240,7 @@ void BPLUSTREE_TYPE::StartNewTree(const KeyType &key, const ValueType &value) {
  */
 INDEX_TEMPLATE_ARGUMENTS
 bool BPLUSTREE_TYPE::InsertIntoLeaf(const KeyType &key, const ValueType &value, Transaction *transaction) {
-  Page *leaf_page = FindLeafPage(key, true);
+  Page *leaf_page = FindLeafPage(key);
   B_PLUS_TREE_LEAF_PAGE_TYPE *leaf_node = reinterpret_cast<B_PLUS_TREE_LEAF_PAGE_TYPE *>(leaf_page->GetData());
   // if duplicate key,return false
   if (leaf_node->Lookup(key, new ValueType{}, comparator_)) {
@@ -259,7 +248,7 @@ bool BPLUSTREE_TYPE::InsertIntoLeaf(const KeyType &key, const ValueType &value, 
     return false;
   }
   int size = leaf_node->Insert(key, value, comparator_);
-  if (size > leaf_max_size_) {  // should split
+  if (size >= leaf_node->GetMaxSize()) {  // should split
     Split<LeafPage>(leaf_node);
   }
   buffer_pool_manager_->UnpinPage(leaf_page->GetPageId(), true);
@@ -284,8 +273,7 @@ N *BPLUSTREE_TYPE::Split(N *node) {
     throw "out of memory";
   }
   N *new_right_node = reinterpret_cast<N *>(new_right_page->GetData());
-  new_right_node->Init(pid, node->GetParentPageId(),
-                       new_right_node->IsLeafPage() ? leaf_max_size_ : internal_max_size_);
+  new_right_node->Init(pid, node->GetParentPageId(), node->IsLeafPage() ? leaf_max_size_ : internal_max_size_);
   node->MoveHalfTo(new_right_node, buffer_pool_manager_);
   InsertIntoParent(node, new_right_node->KeyAt(0), new_right_node);
   buffer_pool_manager_->UnpinPage(new_right_page->GetPageId(), true);
@@ -348,7 +336,7 @@ void BPLUSTREE_TYPE::Remove(const KeyType &key, Transaction *transaction) {
   if (IsEmpty()) {
     return;
   }
-  auto leaf = FindLeafPage(key, true);
+  auto leaf = FindLeafPage(key);
   LeafPage *leaf_node = reinterpret_cast<LeafPage *>(leaf->GetData());
   int beforeSize = leaf_node->GetSize();
   int size = leaf_node->RemoveAndDeleteRecord(key, comparator_);
@@ -608,19 +596,24 @@ Page *BPLUSTREE_TYPE::FindLeafPage(const KeyType &key, bool leftMost) {
   if (IsEmpty()) {
     return nullptr;
   }
-  Page *root_page = buffer_pool_manager_->FetchPage(root_page_id_);
-  // what's the type of root? leaf or non-leaf? what should i cast it to? can leaf node be interpreted as internal node?
+  Page *page = buffer_pool_manager_->FetchPage(root_page_id_);
+  TreePage *p = reinterpret_cast<TreePage *>(page->GetData());
 
-  TreePage *p = reinterpret_cast<TreePage *>(root_page->GetData());
   while (!p->IsLeafPage()) {
     // cast to leaf page
-    auto internalNode = static_cast<InternalPage *>(p);
-    auto child_page_id = internalNode->Lookup(key, comparator_);
-    Page *child_page = buffer_pool_manager_->FetchPage(child_page_id);
-    buffer_pool_manager_->UnpinPage(internalNode->GetPageId(), false);
-    p = reinterpret_cast<TreePage *>(child_page->GetData());
+    // auto internalNode = static_cast<InternalPage *>(p);
+    page_id_t childPid;
+    if (leftMost) {
+      childPid = reinterpret_cast<InternalPage *>(p)->ValueAt(0);
+    } else {
+      childPid = reinterpret_cast<InternalPage *>(p)->Lookup(key, comparator_);
+    }
+    buffer_pool_manager_->UnpinPage(p->GetPageId(), false);
+
+    page = buffer_pool_manager_->FetchPage(childPid);
+    p = reinterpret_cast<TreePage *>(page->GetData());
   }
-  return buffer_pool_manager_->FetchPage(p->GetPageId());
+  return page;
 }
 
 /*
