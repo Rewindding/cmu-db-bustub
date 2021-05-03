@@ -138,8 +138,8 @@ void B_PLUS_TREE_INTERNAL_PAGE_TYPE::MoveHalfTo(BPlusTreeInternalPage *recipient
   // don't forget update their parent_page_id!
   for (int i = GetSize() - s; i < GetSize(); ++i) {
     Page *child_page = buffer_pool_manager->FetchPage(array[i].second);
-    auto child_page_node =
-        reinterpret_cast<B_PLUS_TREE_INTERNAL_PAGE_TYPE *>(child_page->GetData());  // cast to in mem object
+    // child node 不一定是internal node
+    auto child_page_node = reinterpret_cast<BPlusTreePage *>(child_page->GetData());  // cast to in mem object
     child_page_node->SetParentPageId(recipient->GetPageId());
     buffer_pool_manager->UnpinPage(child_page_node->GetPageId(), true);
   }
