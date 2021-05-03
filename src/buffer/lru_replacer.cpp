@@ -28,8 +28,12 @@ LRUReplacer::LRUReplacer(size_t num_pages) : _capacity(num_pages) {
 }
 
 LRUReplacer::~LRUReplacer() {
-  delete front;
-  delete rear;
+  auto p = front;
+  while (p != nullptr) {
+    auto next = p->right;
+    delete p;
+    p = next;
+  }
 }
 
 bool LRUReplacer::Victim(frame_id_t *frame_id) {
