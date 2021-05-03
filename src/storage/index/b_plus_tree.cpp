@@ -304,6 +304,7 @@ void BPLUSTREE_TYPE::InsertIntoParent(BPlusTreePage *old_node, const KeyType &ke
     new_node->SetParentPageId(new_root->GetPageId());
     buffer_pool_manager_->UnpinPage(new_root->GetPageId(), true);
     // update root info
+    // maybe should lock here?
     root_page_id_ = new_root->GetPageId();
     UpdateRootPageId(0);
     return;
@@ -311,10 +312,10 @@ void BPLUSTREE_TYPE::InsertIntoParent(BPlusTreePage *old_node, const KeyType &ke
   Page *parent_page = buffer_pool_manager_->FetchPage(old_node->GetParentPageId());
   InternalPage *parent_node = reinterpret_cast<InternalPage *>(parent_page->GetData());
   int size = parent_node->InsertNodeAfter(old_node->GetPageId(), key, new_node->GetPageId());
+  new_node->SetParentPageId(old_node->GetParentPageId());
   if (size > internal_max_size_) {
     Split<InternalPage>(parent_node);
   }
-  new_node->SetParentPageId(old_node->GetParentPageId());
   // buffer_pool_manager_->UnpinPage(parent_node->GetPageId(), true);
 }
 
