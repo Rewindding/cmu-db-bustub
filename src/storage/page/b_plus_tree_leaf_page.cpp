@@ -128,7 +128,7 @@ void B_PLUS_TREE_LEAF_PAGE_TYPE::MoveHalfTo(BPlusTreeLeafPage *recipient,
   recipient->CopyHalfFrom(array + GetSize() - half, half);
   IncreaseSize(-half);
   // update it's next_page_id
-  recipient->next_page_id_ = GetNextPageId();
+  recipient->SetNextPageId(GetNextPageId());
   SetNextPageId(recipient->GetPageId());
 }
 
