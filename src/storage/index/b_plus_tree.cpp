@@ -71,10 +71,10 @@ bool BPLUSTREE_TYPE::GetValue(const KeyType &key, std::vector<ValueType> *result
 INDEX_TEMPLATE_ARGUMENTS
 bool BPLUSTREE_TYPE::Insert(const KeyType &key, const ValueType &value, Transaction *transaction) {
   bool inserted = optimisticInsert(key, value, transaction);
+  // TO DO 问题：这里inserted!=true的原因可能是有duplicate key！！！,不用再改为concurrent insert
   if (!inserted) {
     return concurrentInsert(key, value, transaction);
   }
-
   return true;
 }
 // assuming that no split needed, if not,return false immediately
@@ -142,7 +142,6 @@ bool BPLUSTREE_TYPE::concurrentInsert(const KeyType &key, const ValueType &value
   // use a que to store ids of locked pages
   std::deque<Page *> wLockedPages;
   root_page->WLatch();
-
   wLockedPages.push_back(root_page);
 
   // special case : if this thread blocked then revoke and
@@ -316,7 +315,7 @@ void BPLUSTREE_TYPE::InsertIntoParent(BPlusTreePage *old_node, const KeyType &ke
   if (size > internal_max_size_) {
     Split<InternalPage>(parent_node);
   }
-  // buffer_pool_manager_->UnpinPage(parent_node->GetPageId(), true);
+  buffer_pool_manager_->UnpinPage(parent_node->GetPageId(), true);
 }
 
 /*****************************************************************************
@@ -545,12 +544,14 @@ INDEXITERATOR_TYPE BPLUSTREE_TYPE::begin() {
  * first, then construct index iterator
  * @return : index iterator
  */
+// TO DO index iterator read latch
 INDEX_TEMPLATE_ARGUMENTS
 INDEXITERATOR_TYPE BPLUSTREE_TYPE::Begin(const KeyType &key) {
   Page *page = buffer_pool_manager_->FetchPage(root_page_id_);
   BPlusTreePage *btp = reinterpret_cast<BPlusTreePage *>(page->GetData());
   while (!btp->IsLeafPage()) {
     auto page_id = reinterpret_cast<InternalPage *>(btp)->Lookup(key, comparator_);
+    buffer_pool_manager_->UnpinPage(btp->GetPageId(), false);
     Page *p = buffer_pool_manager_->FetchPage(page_id);
     btp = reinterpret_cast<BPlusTreePage *>(p->GetData());
   }
