@@ -27,7 +27,17 @@ LRUReplacer::LRUReplacer(size_t num_pages) : _capacity(num_pages) {
   rear->left = front;
 }
 
-LRUReplacer::~LRUReplacer() = default;
+LRUReplacer::~LRUReplacer() {
+  // LOG_INFO("LRU Destructor");
+  Linked_list *p = front.get();
+  while (p != nullptr) {
+    // LOG_INFO("un reference node");
+    Linked_list *next = p->right.get();
+    p->left = nullptr;
+    p->right = nullptr;
+    p = next;
+  }
+}
 
 bool LRUReplacer::Victim(frame_id_t *frame_id) {
   // how to konw the frame's pin counter is 0 or not??? track by it self
