@@ -27,15 +27,7 @@ LRUReplacer::LRUReplacer(size_t num_pages) : _capacity(num_pages) {
   rear->left = front;
 }
 
-LRUReplacer::~LRUReplacer() {
-  std::lock_guard<std::mutex> guard(latch_);
-  auto p = front;
-  while (p != nullptr) {
-    auto next = p->right;
-    delete p;
-    p = next;
-  }
-}
+LRUReplacer::~LRUReplacer() {}
 
 bool LRUReplacer::Victim(frame_id_t *frame_id) {
   // how to konw the frame's pin counter is 0 or not??? track by it self
