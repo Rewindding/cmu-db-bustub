@@ -28,6 +28,7 @@ LRUReplacer::LRUReplacer(size_t num_pages) : _capacity(num_pages) {
 }
 
 LRUReplacer::~LRUReplacer() {
+  std::lock_guard<std::mutex> guard(latch_);
   auto p = front;
   while (p != nullptr) {
     auto next = p->right;
