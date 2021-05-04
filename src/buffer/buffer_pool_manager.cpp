@@ -42,15 +42,16 @@ bool print = true;
 Page *BufferPoolManager::FetchPageImpl(page_id_t page_id) {
   // 1.     Search the page table for the requested page (P).
   // 1.1    If P exists, pin it and return it immediately.
-  if (print) {
-    print = false;
-    std::ifstream f("/autograder/bustub/test/buffer/grading_buffer_pool_manager_concurrency_test.cpp");
-    if (f.is_open()) {
-      LOG_INFO("print /autograder/bustub/test/buffer/grading_buffer_pool_manager_concurrency_test.cpp");
-      std::cout << f.rdbuf();
-    }
-  }
+  //  if (print) {
+  //    print = false;
+  //    std::ifstream f("/autograder/bustub/test/buffer/grading_buffer_pool_manager_concurrency_test.cpp");
+  //    if (f.is_open()) {
+  //      LOG_INFO("print /autograder/bustub/test/buffer/grading_buffer_pool_manager_concurrency_test.cpp");
+  //      std::cout << f.rdbuf();
+  //    }
+  //  }
   std::lock_guard<std::mutex> lock(latch_);
+  //   LOG_INFO("FetchPageImpl(pid:%d)",page_id);
   if (page_table_.count(page_id) != 0U) {
     auto frame_id = page_table_[page_id];
     replacer_->Pin(frame_id);
@@ -89,9 +90,11 @@ Page *BufferPoolManager::FetchPageImpl(page_id_t page_id) {
 
 bool BufferPoolManager::UnpinPageImpl(page_id_t page_id, bool is_dirty) {
   std::lock_guard<std::mutex> lock(latch_);
+  //   LOG_INFO("UnpinPageImpl(pid:%d)",page_id);
   auto frame_id = page_table_[page_id];
   Page &page = pages_[frame_id];
   if (page.GetPinCount() <= 0) {
+    LOG_DEBUG("unpin a not pined page,pid:%d", page_id);
     return false;
   }
   if (--page.pin_count_ == 0) {
@@ -139,6 +142,7 @@ Page *BufferPoolManager::NewPageImpl(page_id_t *page_id) {
     P.is_dirty_ = false;
   }
   *page_id = disk_manager_->AllocatePage();
+  //   LOG_INFO("NewPageImpl(),pid:%d",*page_id);
   // 3.   Update P's metadata, zero out memory and add P to the page table.
   page_table_.erase(P.GetPageId());
   P.ResetMemory();
