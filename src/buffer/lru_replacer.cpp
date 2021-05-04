@@ -21,13 +21,13 @@
 namespace bustub {
 
 LRUReplacer::LRUReplacer(size_t num_pages) : _capacity(num_pages) {
-  front = new Linked_list();
-  rear = new Linked_list();
+  front = std::make_shared<Linked_list>();
+  rear = std::make_shared<Linked_list>();
   front->right = rear;
   rear->left = front;
 }
 
-LRUReplacer::~LRUReplacer() {}
+LRUReplacer::~LRUReplacer() = default;
 
 bool LRUReplacer::Victim(frame_id_t *frame_id) {
   // how to konw the frame's pin counter is 0 or not??? track by it self
@@ -41,7 +41,6 @@ bool LRUReplacer::Victim(frame_id_t *frame_id) {
   // delete the node
   RemoveNode(least_used);
   map.erase(least_used->data);
-  delete least_used;
   return true;
 }
 // will be called when access a frame?
@@ -56,7 +55,6 @@ void LRUReplacer::Pin(frame_id_t frame_id) {
   // remove the node from list
   RemoveNode(pined_frame);
   map.erase(frame_id);
-  delete pined_frame;
 }
 
 void LRUReplacer::Unpin(frame_id_t frame_id) {
@@ -65,11 +63,10 @@ void LRUReplacer::Unpin(frame_id_t frame_id) {
   if (map.size() == _capacity) {
     return;
   }
-  Linked_list *node = nullptr;
   if (map.count(frame_id) != 0U) {
     return;  // already unpined!
   }
-  node = new Linked_list(frame_id);
+  auto node = std::make_shared<Linked_list>(frame_id);
   PushBack(node);
   map[frame_id] = node;
 }

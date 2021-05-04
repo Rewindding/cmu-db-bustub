@@ -13,6 +13,7 @@
 #pragma once
 
 #include <list>
+#include <memory>
 #include <mutex>  // NOLINT
 #include <unordered_map>
 #include <vector>
@@ -24,7 +25,8 @@ namespace bustub {
 // double linked list structure
 struct Linked_list {
   frame_id_t data = 0;
-  Linked_list *left = nullptr, *right = nullptr;
+
+  std::shared_ptr<Linked_list> left = nullptr, right = nullptr;
   Linked_list() = default;
   explicit Linked_list(frame_id_t p) { data = p; }
 };
@@ -58,18 +60,18 @@ class LRUReplacer : public Replacer {
   // capacity
   size_t _capacity = 0;
 
-  Linked_list *front = nullptr, *rear = nullptr;
+  std::shared_ptr<Linked_list> front = nullptr, rear = nullptr;
 
-  std::unordered_map<frame_id_t, Linked_list *> map;
+  std::unordered_map<frame_id_t, std::shared_ptr<Linked_list>> map;
 
   std::mutex latch_;
   // remove from list but not delete
-  void RemoveNode(Linked_list *node) {
+  void RemoveNode(const std::shared_ptr<Linked_list> &node) {
     node->left->right = node->right;
     node->right->left = node->left;
   }
   // push a node to the back
-  void PushBack(Linked_list *node) {
+  void PushBack(const std::shared_ptr<Linked_list> &node) {
     node->left = rear->left;
     rear->left->right = node;
     node->right = rear;
