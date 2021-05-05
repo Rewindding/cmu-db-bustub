@@ -45,6 +45,7 @@ bool LRUReplacer::Victim(frame_id_t *frame_id) {
   std::lock_guard<std::mutex> guard(latch_);
   auto least_used = front->right;
   if (least_used == rear) {
+    LOG_DEBUG("no Victim found in lru replacer");
     return false;
   }
   *frame_id = least_used->data;
