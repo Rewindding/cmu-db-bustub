@@ -76,8 +76,14 @@ Page *BufferPoolManager::FetchPageImpl(page_id_t page_id) {
   page_table_.erase(page.GetPageId());
   page_table_[page_id] = stale_frame;
   // 4.     Update P's metadata, read in the page content from disk, and then return a pointer to P.
+  page.ResetMemory();
   page.page_id_ = page_id;
   (pages_ + stale_frame)->pin_count_++;
+  // this page is newly loaded to memory, pin_count must be 1
+  if ((pages_ + stale_frame)->pin_count_ != 1) {
+    LOG_DEBUG("pin_count:%d,correct", (pages_ + stale_frame)->pin_count_);
+    (pages_ + stale_frame)->pin_count_ = 1;
+  }
   disk_manager_->ReadPage(page_id, page.GetData());
   return pages_ + stale_frame;
 }
@@ -171,10 +177,12 @@ bool BufferPoolManager::DeletePageImpl(page_id_t page_id) {
   if (P.page_id_ != page_id) {
     LOG_DEBUG("pageId not match,given pid:%d,pid in page array:%d", page_id, P.GetPageId());
   }
-  if (P.GetPinCount() > 0) {
+  if (P.GetPinCount() != 0) {
     LOG_DEBUG("delete a pin page,pid:%d,pin_cnt:%d", P.GetPageId(), P.GetPinCount());
     return false;
   }
+  // delete 掉的page，也要从lru replacer里面去除掉。。。
+  replacer_->Pin(frame_id);
   disk_manager_->DeallocatePage(page_id);
   P.ResetMemory();
   P.page_id_ = INVALID_PAGE_ID;
