@@ -78,12 +78,7 @@ Page *BufferPoolManager::FetchPageImpl(page_id_t page_id) {
   // 4.     Update P's metadata, read in the page content from disk, and then return a pointer to P.
   page.ResetMemory();
   page.page_id_ = page_id;
-  (pages_ + stale_frame)->pin_count_++;
-  // this page is newly loaded to memory, pin_count must be 1
-  if ((pages_ + stale_frame)->pin_count_ != 1) {
-    LOG_DEBUG("pin_count:%d,correct", (pages_ + stale_frame)->pin_count_);
-    (pages_ + stale_frame)->pin_count_ = 1;
-  }
+  (pages_ + stale_frame)->pin_count_++;  // this page is newly loaded to memory, pin_count must be 1
   disk_manager_->ReadPage(page_id, page.GetData());
   return pages_ + stale_frame;
 }
@@ -100,9 +95,6 @@ bool BufferPoolManager::UnpinPageImpl(page_id_t page_id, bool is_dirty) {
   if (page.GetPinCount() <= 0) {
     LOG_DEBUG("unpin a not pined page,pid:%d", page_id);
     return false;
-  }
-  if (page.page_id_ != page_id) {
-    LOG_DEBUG("pageId not match,given pid:%d,pid in page array:%d", page_id, page.GetPageId());
   }
   if (--page.pin_count_ == 0) {
     // put it to lru re placer??
@@ -174,9 +166,6 @@ bool BufferPoolManager::DeletePageImpl(page_id_t page_id) {
   }  // page not found!
   auto frame_id = page_table_[page_id];
   Page &P = pages_[frame_id];
-  if (P.page_id_ != page_id) {
-    LOG_DEBUG("pageId not match,given pid:%d,pid in page array:%d", page_id, P.GetPageId());
-  }
   if (P.GetPinCount() != 0) {
     LOG_DEBUG("delete a pin page,pid:%d,pin_cnt:%d", P.GetPageId(), P.GetPinCount());
     return false;
