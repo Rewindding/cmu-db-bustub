@@ -43,17 +43,36 @@ bool BPLUSTREE_TYPE::IsEmpty() const { return root_page_id_ == INVALID_PAGE_ID; 
  */
 INDEX_TEMPLATE_ARGUMENTS
 bool BPLUSTREE_TYPE::GetValue(const KeyType &key, std::vector<ValueType> *result, Transaction *transaction) {
-  Page *leaf_page = FindLeafPage(key);
-
-  if (leaf_page == nullptr) {
+  dummy_page.RLatch();
+  if (IsEmpty()) {
+    dummy_page.RUnlatch();
     return false;
   }
-  LeafPage *p = reinterpret_cast<LeafPage *>(leaf_page->GetData());
+  Page *page = buffer_pool_manager_->FetchPage(root_page_id_);
+  page->RLatch();
+  dummy_page.RUnlatch();
+  TreePage *p = reinterpret_cast<TreePage *>(page->GetData());
+  while (!p->IsLeafPage()) {
+    // cast to leaf page
+    // auto internalNode = static_cast<InternalPage *>(p);
+    page_id_t childPid;
+    childPid = static_cast<InternalPage *>(p)->Lookup(key, comparator_);
+
+    Page *childPage = buffer_pool_manager_->FetchPage(childPid);
+    childPage->RLatch();
+    page->RUnlatch();
+    buffer_pool_manager_->UnpinPage(page->GetPageId(), false);
+    page = childPage;
+    p = reinterpret_cast<TreePage *>(childPage->GetData());
+  }
+  LeafPage *targetLeaf = static_cast<LeafPage *>(p);
+
   ValueType value{};
-  if (p->Lookup(key, &value, comparator_)) {
+  if (targetLeaf->Lookup(key, &value, comparator_)) {
     result->push_back(value);
   }
-  buffer_pool_manager_->UnpinPage(leaf_page->GetPageId(), false);
+  page->RUnlatch();
+  buffer_pool_manager_->UnpinPage(page->GetPageId(), false);
   return !result->empty();
 }
 
