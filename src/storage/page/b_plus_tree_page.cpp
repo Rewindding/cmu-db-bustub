@@ -33,13 +33,32 @@ void BPlusTreePage::IncreaseSize(int amount) { size_ += amount; }
  * Helper methods to get/set max size (capacity) of the page
  */
 int BPlusTreePage::GetMaxSize() const { return max_size_; }
+
 void BPlusTreePage::SetMaxSize(int size) { max_size_ = size; }
 
 /*
  * Helper method to get min page size
  * Generally, min page size == max page size / 2
  */
-int BPlusTreePage::GetMinSize() const { return max_size_ / 2; }
+// page size can = min size
+int BPlusTreePage::GetMinSize() const {
+  int minSize;
+  if (IsRootPage()) {
+    // leaf root
+    if (IsLeafPage()) {
+      return 1;
+    }
+    // internal root, at least has 2 child
+    return 2;
+  }
+  if (IsLeafPage()) {
+    // ceil(n/2) = (n+1)/2;
+    minSize = (max_size_) / 2;  // ceil((n-1)/2);
+  } else {
+    minSize = (max_size_ + 1 / 2);  // ceil(n/2);
+  }
+  return minSize;
+}
 
 /*
  * Helper methods to get/set parent page id
@@ -64,5 +83,5 @@ bool BPlusTreePage::IsSafeForInsert() {
   }
   return size_ < GetMaxSize();
 }
-bool BPlusTreePage::IsSafeForDelete() { return size_ > GetMinSize(); }
+bool BPlusTreePage::IsSafeForDelete() { return size_ - 1 >= GetMinSize(); }
 }  // namespace bustub
