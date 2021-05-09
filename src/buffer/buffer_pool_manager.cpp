@@ -87,7 +87,7 @@ bool BufferPoolManager::UnpinPageImpl(page_id_t page_id, bool is_dirty) {
   std::lock_guard<std::mutex> lock(latch_);
   // LOG_INFO("UnpinPageImpl(pid:%d)", page_id);
   if (page_table_.count(page_id) == 0U) {
-    LOG_DEBUG("UnpinPageImpl,pid %d not found in ptable", page_id);
+    // LOG_DEBUG("UnpinPageImpl,pid %d not found in ptable", page_id);
     return false;
   }
   auto frame_id = page_table_[page_id];
