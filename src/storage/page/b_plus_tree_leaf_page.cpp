@@ -219,6 +219,7 @@ void B_PLUS_TREE_LEAF_PAGE_TYPE::CopyAllFrom(MappingType *items, int size) {
   for (int i = 0; i < size; ++i) {
     array[current_size + i] = items[i];
   }
+  IncreaseSize(size);
 }
 
 /*****************************************************************************
@@ -263,7 +264,7 @@ void B_PLUS_TREE_LEAF_PAGE_TYPE::MoveLastToFrontOf(BPlusTreeLeafPage *recipient,
       reinterpret_cast<BPlusTreeInternalPage<KeyType, page_id_t, KeyComparator> *>(parent_page->GetData());
   page_id_t parentIndex = parent_node->ValueIndex(GetPageId());
   buffer_pool_manager->UnpinPage(parent_page->GetPageId(), false);
-  recipient->CopyFirstFrom(array[GetSize() - 1], parentIndex, buffer_pool_manager);
+  recipient->CopyFirstFrom(array[GetSize() - 1], parentIndex + 1, buffer_pool_manager);
   IncreaseSize(-1);
 }
 
