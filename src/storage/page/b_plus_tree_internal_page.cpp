@@ -169,7 +169,7 @@ void B_PLUS_TREE_INTERNAL_PAGE_TYPE::CopyHalfFrom(MappingType *items, int size,
 INDEX_TEMPLATE_ARGUMENTS
 void B_PLUS_TREE_INTERNAL_PAGE_TYPE::Remove(int index) {
   // memmove(array+index,array+index+1,sizeof(MappingType)*(GetSize()-index-1));
-  for (int i = index; i < GetSize() - 2; ++i) {
+  for (int i = index; i < GetSize() - 1; ++i) {
     array[i] = array[i + 1];
   }
   IncreaseSize(-1);
