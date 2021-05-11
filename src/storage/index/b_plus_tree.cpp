@@ -375,6 +375,7 @@ int BPLUSTREE_TYPE::optimisticDelete(const KeyType &key, Transaction *transactio
   dummy_page.RLatch();
   rLatchPages->push_back(&dummy_page);
   if (IsEmpty()) {
+    dummy_page.RUnlatch();
     return -1;  // key not exist
   }
   // TO DO 找到插入删除位置 获取锁过程类似，应该封装一个函数公用？
@@ -388,7 +389,7 @@ int BPLUSTREE_TYPE::optimisticDelete(const KeyType &key, Transaction *transactio
   }
   while (!treePage->IsLeafPage()) {
     Page *childPage = buffer_pool_manager_->FetchPage(static_cast<InternalPage *>(treePage)->Lookup(key, comparator_));
-    TreePage *childTreePage = reinterpret_cast<TreePage *>(page->GetData());
+    TreePage *childTreePage = reinterpret_cast<TreePage *>(childPage->GetData());
 
     if (childTreePage->IsLeafPage()) {
       childPage->WLatch();
@@ -448,6 +449,8 @@ int BPLUSTREE_TYPE::concurrentDelete(const KeyType &key, Transaction *transactio
     return -1;
   }
   Page *page = buffer_pool_manager_->FetchPage(root_page_id_);
+  page->WLatch();
+  wLatchPages->push_back(page);
   TreePage *treePage = reinterpret_cast<TreePage *>(page->GetData());
   while (!treePage->IsLeafPage()) {
     Page *childPage = buffer_pool_manager_->FetchPage(static_cast<InternalPage *>(treePage)->Lookup(key, comparator_));
@@ -523,7 +526,7 @@ bool BPLUSTREE_TYPE::CoalesceOrRedistribute(N *node, Transaction *transaction) {
       res = true;
       Coalesce<N>(&left_sibling, &node, &parent_node, parent_index, transaction);
     } else {  // redistribute
-      Redistribute(left_sibling, node, 0);
+      Redistribute(left_sibling, node, 1);
     }
     left_page->WUnlatch();
     buffer_pool_manager_->UnpinPage(left_page->GetPageId(), true);
@@ -532,9 +535,11 @@ bool BPLUSTREE_TYPE::CoalesceOrRedistribute(N *node, Transaction *transaction) {
     right_page->WLatch();
     N *right_sibling = reinterpret_cast<N *>(right_page->GetData());
     if (right_sibling->GetSize() + node->GetSize() <= pageMaxSize) {  // merge to right sibling
-      Coalesce<N>(&node, &right_sibling, &parent_node, parent_index, transaction);
+      // leaf page 在merge的时候要考虑set
+      // next_page_id，所以总是从右边合并到左边，如果从左合并到右边，需要更新左边节点前一个节点
+      Coalesce<N>(&node, &right_sibling, &parent_node, parent_index + 1, transaction);
     } else {  // redistribute
-      Redistribute(node, right_sibling, 0);
+      Redistribute(right_sibling, node, 0);
     }
     right_page->WUnlatch();
     buffer_pool_manager_->UnpinPage(right_page->GetPageId(), true);
@@ -572,7 +577,7 @@ bool BPLUSTREE_TYPE::Coalesce(N **neighbor_node, N **node,
   parent_t->Remove(index);
   if (parent_t->GetSize() < parent_t->GetMinSize()) {
     // deal with parent size,return coalesceOrRedistribute()...
-    return CoalesceOrRedistribute<BPlusTreeInternalPage<KeyType, page_id_t, KeyComparator>>(parent_t);
+    return CoalesceOrRedistribute<BPlusTreeInternalPage<KeyType, page_id_t, KeyComparator>>(parent_t, transaction);
   }
   return false;
 }
