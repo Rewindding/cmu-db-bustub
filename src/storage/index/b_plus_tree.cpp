@@ -9,11 +9,10 @@
 //
 //===----------------------------------------------------------------------===//
 
+#include "storage/index/b_plus_tree.h"
 #include <string>
-
 #include "common/exception.h"
 #include "common/rid.h"
-#include "storage/index/b_plus_tree.h"
 #include "storage/page/header_page.h"
 
 namespace bustub {
@@ -376,6 +375,7 @@ int BPLUSTREE_TYPE::optimisticDelete(const KeyType &key, Transaction *transactio
   rLatchPages->push_back(&dummy_page);
   if (IsEmpty()) {
     dummy_page.RUnlatch();
+    rLatchPages->clear();
     return -1;  // key not exist
   }
   // TO DO 找到插入删除位置 获取锁过程类似，应该封装一个函数公用？
@@ -477,11 +477,16 @@ int BPLUSTREE_TYPE::concurrentDelete(const KeyType &key, Transaction *transactio
   while (!wLatchPages->empty()) {
     Page *p = wLatchPages->front();
     wLatchPages->pop_front();
-    p->WUnlatch();
-    buffer_pool_manager_->UnpinPage(p->GetPageId(), targetLeaf->GetPageId() == p->GetPageId());
-  }
-  for (page_id_t deletedPid : *transaction->GetDeletedPageSet()) {
-    buffer_pool_manager_->DeletePage(deletedPid);
+    if (transaction->GetDeletedPageSet()->count(p->GetPageId()) == 1U) {
+      transaction->GetDeletedPageSet()->erase(p->GetPageId());
+      // 直接unpin+delete? 不行，因为没有wunlatch，后面新来的page可能用了原来的page的latch...
+      p->WUnlatch();
+      buffer_pool_manager_->UnpinPage(p->GetPageId(), false);
+      buffer_pool_manager_->DeletePage(p->GetPageId());
+    } else {
+      p->WUnlatch();
+      buffer_pool_manager_->UnpinPage(p->GetPageId(), targetLeaf->GetPageId() == p->GetPageId());
+    }
   }
   transaction->GetDeletedPageSet()->clear();
   return 1;
@@ -537,12 +542,15 @@ bool BPLUSTREE_TYPE::CoalesceOrRedistribute(N *node, Transaction *transaction) {
     if (right_sibling->GetSize() + node->GetSize() <= pageMaxSize) {  // merge to right sibling
       // leaf page 在merge的时候要考虑set
       // next_page_id，所以总是从右边合并到左边，如果从左合并到右边，需要更新左边节点前一个节点
+      // right page 在这里会被加到deleted page里面
+      transaction->AddIntoPageSet(right_page);
       Coalesce<N>(&node, &right_sibling, &parent_node, parent_index + 1, transaction);
     } else {  // redistribute
       Redistribute(right_sibling, node, 0);
+      // right page 没有被删除，应该unpin true，
+      right_page->WUnlatch();
+      buffer_pool_manager_->UnpinPage(right_page->GetPageId(), true);
     }
-    right_page->WUnlatch();
-    buffer_pool_manager_->UnpinPage(right_page->GetPageId(), true);
   }
   // unpin parent pages
   buffer_pool_manager_->UnpinPage(parent_node->GetPageId(), true);
@@ -620,11 +628,14 @@ bool BPLUSTREE_TYPE::AdjustRoot(BPlusTreePage *old_root_node) {
   }
   if (!old_root_node->IsLeafPage() && root_size == 1) {
     root_page_id_ = static_cast<InternalPage *>(old_root_node)->ValueAt(0);
+    // TO DO 这里这个page没有获取wlock! 但感觉影响不大，因为没有修改数据，，改的只是parent pid
     Page *new_root_page = buffer_pool_manager_->FetchPage(root_page_id_);
+    // new_root_page->WLatch();
     BPlusTreePage *new_root_node = reinterpret_cast<BPlusTreePage *>(new_root_page->GetData());
     new_root_node->SetParentPageId(INVALID_PAGE_ID);
-    UpdateRootPageId(0);
+    // new_root_page->WUnlatch();
     buffer_pool_manager_->UnpinPage(root_page_id_, true);
+    UpdateRootPageId(0);
     return true;
   }
   return false;
