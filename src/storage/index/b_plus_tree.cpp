@@ -17,7 +17,6 @@
 #include "storage/page/header_page.h"
 
 namespace bustub {
-
 INDEX_TEMPLATE_ARGUMENTS
 BPLUSTREE_TYPE::BPlusTree(std::string name, BufferPoolManager *buffer_pool_manager, const KeyComparator &comparator,
                           int leaf_max_size, int internal_max_size)
@@ -353,6 +352,7 @@ void BPLUSTREE_TYPE::ToGraph(BPlusTreePage *page, BufferPoolManager *bpm, std::o
           out << "{rank=same " << internal_prefix << sibling_page->GetPageId() << " " << internal_prefix
               << child_page->GetPageId() << "};\n";
         }
+        bpm->UnpinPage(sibling_page->GetPageId(), false);
       }
     }
   }

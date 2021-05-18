@@ -72,7 +72,7 @@ void TableGenerator::FillTable(TableMetadata *info, TableInsertMeta *table_meta)
 
 void TableGenerator::GenerateTestTables() {
   /**
-   * This array configures each of the test tables. Each able is configured
+   * This array configures each of the test tables. Each table is configured
    * with a name, size, and schema. We also configure the columns of the table. If
    * you add a new table, set it up here.
    */
@@ -93,6 +93,14 @@ void TableGenerator::GenerateTestTables() {
        TEST2_SIZE,
        {{"col1", TypeId::SMALLINT, false, Dist::Serial, 0, 0},
         {"col2", TypeId::INTEGER, true, Dist::Uniform, 0, 9},
+        {"col3", TypeId::BIGINT, false, Dist::Uniform, 0, 1024},
+        {"col4", TypeId::INTEGER, true, Dist::Uniform, 0, 2048}}},
+
+      // Table 3
+      {"test_3",
+       TEST2_SIZE,
+       {{"col1", TypeId::INTEGER, false, Dist::Serial, 0, 0},
+        {"col2", TypeId::INTEGER, true, Dist::Uniform, 10, 19},
         {"col3", TypeId::BIGINT, false, Dist::Uniform, 0, 1024},
         {"col4", TypeId::INTEGER, true, Dist::Uniform, 0, 2048}}},
 
