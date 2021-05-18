@@ -233,11 +233,12 @@ INDEX_TEMPLATE_ARGUMENTS
 void B_PLUS_TREE_LEAF_PAGE_TYPE::MoveFirstToEndOf(BPlusTreeLeafPage *recipient,
                                                   BufferPoolManager *buffer_pool_manager) {
   auto pair = array[0];
-  IncreaseSize(-1);
+  // 应该先移动，再减小size
   // memmove(array,array+1,sizeof(MappingType)*GetSize());
   for (int i = 0; i < GetSize() - 1; ++i) {
     array[i] = array[i + 1];
   }
+  IncreaseSize(-1);
   Page *parent_page = buffer_pool_manager->FetchPage(GetParentPageId());
   auto parent_node =
       reinterpret_cast<BPlusTreeInternalPage<KeyType, page_id_t, KeyComparator> *>(parent_page->GetData());

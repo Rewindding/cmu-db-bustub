@@ -72,13 +72,20 @@ ValueType B_PLUS_TREE_INTERNAL_PAGE_TYPE::ValueAt(int index) const { return arra
  */
 INDEX_TEMPLATE_ARGUMENTS
 ValueType B_PLUS_TREE_INTERNAL_PAGE_TYPE::Lookup(const KeyType &key, const KeyComparator &comparator) const {
-  // TO DO optimize to binary search!
-  for (int i = 1; i < GetSize(); ++i) {
-    if (comparator(array[i].first, key) > 0) {
-      return array[i - 1].second;
+  int l = 1;
+  int r = GetSize() - 1;
+  int pos = GetSize();
+  while (l <= r) {
+    int m = (l + r) >> 1;
+    int d = comparator(array[m].first, key);
+    if (d > 0) {
+      pos = m;
+      r = m - 1;
+    } else {
+      l = m + 1;
     }
   }
-  return array[GetSize() - 1].second;
+  return array[pos - 1].second;
 }
 
 /*****************************************************************************
