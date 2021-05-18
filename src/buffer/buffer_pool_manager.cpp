@@ -168,6 +168,7 @@ bool BufferPoolManager::DeletePageImpl(page_id_t page_id) {
   Page &P = pages_[frame_id];
   if (P.GetPinCount() != 0) {
     LOG_DEBUG("delete a pin page,pid:%d,pin_cnt:%d", P.GetPageId(), P.GetPinCount());
+    // TO DO 在这里应该把pid放到一个队列里，异步轮询删除
     return false;
   }
   // delete 掉的page，也要从lru replacer里面去除掉。。。
