@@ -12,6 +12,7 @@
 
 #pragma once
 
+#include <memory>
 #include <vector>
 
 #include "common/rid.h"
@@ -44,5 +45,7 @@ class IndexScanExecutor : public AbstractExecutor {
  private:
   /** The index scan plan node to be executed. */
   const IndexScanPlanNode *plan_;
+
+  std::unique_ptr<IndexIterator<GenericKey<8>, RID, GenericComparator<8>>> index_iterator_;
 };
 }  // namespace bustub
