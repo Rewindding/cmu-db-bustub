@@ -45,5 +45,9 @@ class SeqScanExecutor : public AbstractExecutor {
   const SeqScanPlanNode *plan_;
 
   std::unique_ptr<TableIterator> iterator = nullptr;
+
+  const TableMetadata *table_meta_data_;
+
+  std::vector<uint32_t> output_tuple_key_attrs_;
 };
 }  // namespace bustub

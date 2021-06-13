@@ -48,7 +48,7 @@ bool NestedLoopJoinExecutor::Next(Tuple *tuple, RID *rid) {
           values.push_back(value);
         }
         for (uint32_t i = 0; i < rightSchema->GetColumnCount(); ++i) {
-          auto value = rightTuple.GetValue(leftSchema, i);
+          auto value = rightTuple.GetValue(rightSchema, i);
           values.push_back(value);
         }
         // plan_->OutputSchema()->

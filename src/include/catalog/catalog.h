@@ -123,7 +123,7 @@ class Catalog {
     auto index_id = next_index_oid_.fetch_add(1);
     index_names_[table_name][index_name] = index_id;
     auto bPlusTree = new BPlusTreeIndex<KeyType, ValueType, KeyComparator>(
-        new IndexMetadata(index_name, table_name, &key_schema, key_attrs), bpm_);
+        new IndexMetadata(index_name, table_name, &schema, key_attrs), bpm_);
     // insert existing table data into this b tree index
     // get table heap ,table iterator, insert every tuple into the index.
     TableMetadata *tableMetadata = GetTable(table_name);
