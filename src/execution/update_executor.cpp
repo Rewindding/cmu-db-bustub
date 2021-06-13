@@ -38,16 +38,6 @@ bool UpdateExecutor::Next([[maybe_unused]] Tuple *tuple, RID *rid) {
   for (IndexInfo *index : indexes) {
     // how to check if this index need not to update,e.g the key does not change,key attibutes
     // index->index_->GetKeyAttrs(); if key attributes x in plan_->GetUpdateAttr(), the index should be updated
-    bool shouldUpdate = false;
-    for (auto keyAttrs : index->index_->GetKeyAttrs()) {
-      if (plan_->GetUpdateAttr()->count(keyAttrs) != 0U) {
-        shouldUpdate = true;
-        break;
-      }
-    }
-    if (!shouldUpdate) {
-      continue;
-    }
     // 这里delete entry是基于tuple的，假如有重复的key，如何能确保删除掉这个tuple对应的那条记录吗？
     Tuple oldIndexKey = tuple->KeyFromTuple(table_info_->schema_, index->key_schema_, index->index_->GetKeyAttrs());
     Tuple newIndexKey = newTuple.KeyFromTuple(table_info_->schema_, index->key_schema_, index->index_->GetKeyAttrs());
