@@ -38,9 +38,13 @@ bool InsertExecutor::Next([[maybe_unused]] Tuple *tuple, RID *rid) {
     // how to use value to generate a tuple?
     *tuple = Tuple(value, &tableMetadata->schema_);
   } else {
-    if (!child_executor_->Next(tuple, rid)) {  // no tuple to insert
-      return false;
+    while (child_executor_->Next(tuple, rid)) {  // no tuple to insert
+      bool inserted = tableMetadata->table_->InsertTuple(*tuple, rid, exec_ctx_->GetTransaction());
+      if (!inserted) {
+        return false;
+      }
     }
+    return false;
   }
   bool inserted = tableMetadata->table_->InsertTuple(*tuple, rid, exec_ctx_->GetTransaction());
   if (!inserted) {
