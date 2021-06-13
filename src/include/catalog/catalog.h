@@ -124,8 +124,15 @@ class Catalog {
     index_names_[table_name][index_name] = index_id;
     auto bPlusTree = new BPlusTreeIndex<KeyType, ValueType, KeyComparator>(
         new IndexMetadata(index_name, table_name, &key_schema, key_attrs), bpm_);
-    // TODO(rewindding): need to insert existing table data into this b tree?
+    // insert existing table data into this b tree index
     // get table heap ,table iterator, insert every tuple into the index.
+    TableMetadata *tableMetadata = GetTable(table_name);
+    auto tableIter = tableMetadata->table_->Begin(txn);
+    while (tableIter != tableMetadata->table_->End()) {
+      Tuple indexKey = tableIter->KeyFromTuple(tableMetadata->schema_, key_schema, key_attrs);
+      bPlusTree->InsertEntry(indexKey, tableIter->GetRid(), txn);
+      tableIter++;
+    }
     indexes_[index_id] = std::make_unique<IndexInfo>(
         IndexInfo(key_schema, index_name, std::unique_ptr<Index>(bPlusTree), index_id, table_name, keysize));
     return indexes_[index_id].get();
