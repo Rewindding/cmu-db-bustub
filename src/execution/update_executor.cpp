@@ -33,6 +33,10 @@ bool UpdateExecutor::Next([[maybe_unused]] Tuple *tuple, RID *rid) {
   if (!updated) {
     return updated;
   }
+  if (exec_ctx_->GetTransaction()->IsExclusiveLocked(*rid) &&
+      exec_ctx_->GetTransaction()->GetIsolationLevel() != IsolationLevel::REPEATABLE_READ) {
+    exec_ctx_->GetLockManager()->Unlock(exec_ctx_->GetTransaction(), *rid);
+  }
   // update all indexes
   auto indexes = exec_ctx_->GetCatalog()->GetTableIndexes(table_info_->name_);
   for (IndexInfo *index : indexes) {
@@ -41,6 +45,10 @@ bool UpdateExecutor::Next([[maybe_unused]] Tuple *tuple, RID *rid) {
     // 这里delete entry是基于tuple的，假如有重复的key，如何能确保删除掉这个tuple对应的那条记录吗？
     Tuple oldIndexKey = tuple->KeyFromTuple(table_info_->schema_, index->key_schema_, index->index_->GetKeyAttrs());
     Tuple newIndexKey = newTuple.KeyFromTuple(table_info_->schema_, index->key_schema_, index->index_->GetKeyAttrs());
+    auto iwr = IndexWriteRecord(*rid, table_info_->oid_, WType::UPDATE, newIndexKey, index->index_oid_,
+                                exec_ctx_->GetCatalog());
+    iwr.old_tuple_ = oldIndexKey;
+    exec_ctx_->GetTransaction()->AppendTableWriteRecord(iwr);
     // 是否应该先获取要更新的key对应的rid，看是否与待更新的tuple rid对应？
     index->index_->DeleteEntry(oldIndexKey, *rid, exec_ctx_->GetTransaction());
     index->index_->InsertEntry(newIndexKey, *rid, exec_ctx_->GetTransaction());

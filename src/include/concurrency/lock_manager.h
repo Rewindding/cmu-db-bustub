@@ -14,10 +14,13 @@
 
 #include <algorithm>
 #include <condition_variable>  // NOLINT
+#include <deque>
 #include <list>
 #include <memory>
 #include <mutex>  // NOLINT
+#include <set>
 #include <unordered_map>
+#include <unordered_set>
 #include <utility>
 #include <vector>
 
@@ -48,6 +51,11 @@ class LockManager {
     std::list<LockRequest> request_queue_;
     std::condition_variable cv_;  // for notifying blocked transactions on this rid
     bool upgrading_ = false;
+  };
+  class RIDLockState {
+   public:
+    txn_id_t writer_txn_id_ = INVALID_TXN_ID;
+    std::unordered_set<txn_id_t> reader_txn_ids_;
   };
 
  public:
@@ -139,7 +147,11 @@ class LockManager {
   /** Lock table for lock requests. */
   std::unordered_map<RID, LockRequestQueue> lock_table_;
   /** Waits-for graph representation. */
-  std::unordered_map<txn_id_t, std::vector<txn_id_t>> waits_for_;
+  std::unordered_map<txn_id_t, std::deque<txn_id_t>> waits_for_;
+
+  std::set<std::pair<txn_id_t, txn_id_t>> waits_for_edges_;
+
+  std::unordered_map<RID, RIDLockState> rid_lock_state_;
 };
 
 }  // namespace bustub
