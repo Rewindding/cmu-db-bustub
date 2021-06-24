@@ -11,48 +11,252 @@
 //===----------------------------------------------------------------------===//
 
 #include "concurrency/lock_manager.h"
-
 #include <utility>
 #include <vector>
+#include "concurrency/transaction_manager.h"
 
 namespace bustub {
 
+class TransactionManager;
 bool LockManager::LockShared(Transaction *txn, const RID &rid) {
+  // check这个rid是否已经被获取了exclusive lock
+  std::unique_lock<std::mutex> latch(latch_);
+  if (txn->GetState() == TransactionState::SHRINKING && txn->GetIsolationLevel() == IsolationLevel::REPEATABLE_READ) {
+    txn->SetState(TransactionState::ABORTED);
+  }
+  if (txn->GetState() == TransactionState::ABORTED) {  // repeatable read 的隔离级别才是2PL
+    return false;
+  }
+  if (txn->IsSharedLocked(rid)) {
+    return true;
+  }
+  RIDLockState &ridLockState = rid_lock_state_[rid];
+  txn->SetState(TransactionState::GROWING);
+  if (ridLockState.writer_txn_id_ != INVALID_TXN_ID) {
+    // add edge 只执行一次
+    AddEdge(txn->GetTransactionId(), ridLockState.writer_txn_id_);
+    // 插入时记录位置，方便后面删除
+    // 存这个信息的意义是？
+    auto iter = lock_table_[rid].request_queue_.insert(lock_table_[rid].request_queue_.end(),
+                                                       LockRequest(txn->GetTransactionId(), LockMode::SHARED));
+    std::condition_variable &cond = lock_table_[rid].cv_;
+    while (ridLockState.writer_txn_id_ != INVALID_TXN_ID) {
+      if (txn->GetState() == TransactionState::ABORTED) {
+        RemoveEdge(txn->GetTransactionId(), ridLockState.writer_txn_id_);
+        return false;
+      }
+      cond.wait_for(latch, cycle_detection_interval);
+    }
+    // 获取锁过后应该把这个queue里面对应的transactionID删除
+    lock_table_[rid].request_queue_.erase(iter);
+    // wlatch一释放，所有的reader都可以同时获取rlatch
+    RemoveEdge(txn->GetTransactionId(), ridLockState.writer_txn_id_);
+  }
+  ridLockState.reader_txn_ids_.insert(txn->GetTransactionId());
   txn->GetSharedLockSet()->emplace(rid);
   return true;
 }
 
 bool LockManager::LockExclusive(Transaction *txn, const RID &rid) {
+  std::unique_lock<std::mutex> latch(latch_);
+  if (txn->GetState() == TransactionState::SHRINKING && txn->GetIsolationLevel() == IsolationLevel::REPEATABLE_READ) {
+    txn->SetState(TransactionState::ABORTED);
+  }
+  if (txn->GetState() == TransactionState::ABORTED) {
+    return false;
+  }
+  if (txn->IsExclusiveLocked(rid)) {
+    return true;
+  }
+  RIDLockState &ridLockState = rid_lock_state_[rid];
+  std::deque<txn_id_t> waitedTxns;
+  if (ridLockState.writer_txn_id_ != INVALID_TXN_ID) {
+    AddEdge(txn->GetTransactionId(), ridLockState.writer_txn_id_);
+    waitedTxns.push_back(ridLockState.writer_txn_id_);
+  }
+  if (!ridLockState.reader_txn_ids_.empty()) {
+    // add all waiting edges
+    for (txn_id_t tid : ridLockState.reader_txn_ids_) {
+      AddEdge(txn->GetTransactionId(), tid);
+      waitedTxns.push_back(tid);
+    }
+  }
+  auto iter = lock_table_[rid].request_queue_.insert(lock_table_[rid].request_queue_.end(),
+                                                     LockRequest(txn->GetTransactionId(), LockMode::EXCLUSIVE));
+  std::condition_variable &cond = lock_table_[rid].cv_;
+  while (ridLockState.writer_txn_id_ != INVALID_TXN_ID) {
+    if (txn->GetState() == TransactionState::ABORTED) {
+      for (txn_id_t tid : waitedTxns) {
+        RemoveEdge(txn->GetTransactionId(), tid);
+      }
+      return false;
+    }
+    cond.wait_for(latch, cycle_detection_interval);
+  }
+  ridLockState.writer_txn_id_ = txn->GetTransactionId();
+  while (!ridLockState.reader_txn_ids_.empty()) {
+    if (txn->GetState() == TransactionState::ABORTED) {
+      for (txn_id_t tid : waitedTxns) {
+        RemoveEdge(txn->GetTransactionId(), tid);
+      }
+      return false;
+    }
+    cond.wait_for(latch, cycle_detection_interval);
+  }
+  lock_table_[rid].request_queue_.erase(iter);
+  for (txn_id_t tid : waitedTxns) {
+    RemoveEdge(txn->GetTransactionId(), tid);
+  }
   txn->GetExclusiveLockSet()->emplace(rid);
   return true;
 }
 
 bool LockManager::LockUpgrade(Transaction *txn, const RID &rid) {
+  std::unique_lock<std::mutex> latch(latch_);
+  if (txn->GetState() == TransactionState::SHRINKING && txn->GetIsolationLevel() == IsolationLevel::REPEATABLE_READ) {
+    txn->SetState(TransactionState::ABORTED);
+  }
+  if (txn->GetState() == TransactionState::ABORTED) {
+    return false;
+  }
+  if (txn->IsExclusiveLocked(rid)) {
+    return true;
+  }
+  RIDLockState &ridLockState = rid_lock_state_[rid];
+  // first,release the shared latch
+  ridLockState.reader_txn_ids_.erase(txn->GetTransactionId());
   txn->GetSharedLockSet()->erase(rid);
+  // then wait until get the wlatch
+  std::condition_variable &cond = lock_table_[rid].cv_;
+  std::deque<txn_id_t> waitedTxns;
+  if (ridLockState.writer_txn_id_ != INVALID_TXN_ID) {
+    AddEdge(txn->GetTransactionId(), ridLockState.writer_txn_id_);
+    waitedTxns.push_back(ridLockState.writer_txn_id_);
+  }
+  while (ridLockState.writer_txn_id_ != INVALID_TXN_ID) {
+    if (txn->GetState() == TransactionState::ABORTED) {
+      for (txn_id_t txnId : waitedTxns) {
+        RemoveEdge(txn->GetTransactionId(), txnId);
+      }
+      return false;
+    }
+    cond.wait_for(latch, cycle_detection_interval);
+  }
+  ridLockState.writer_txn_id_ = txn->GetTransactionId();
+  for (const txn_id_t &txnId : ridLockState.reader_txn_ids_) {
+    AddEdge(txn->GetTransactionId(), txnId);
+    waitedTxns.push_back(txnId);
+  }
+  while (!ridLockState.reader_txn_ids_.empty()) {
+    if (txn->GetState() == TransactionState::ABORTED) {
+      for (txn_id_t txnId : waitedTxns) {
+        RemoveEdge(txn->GetTransactionId(), txnId);
+      }
+      return false;
+    }
+    cond.wait_for(latch, cycle_detection_interval);
+  }
   txn->GetExclusiveLockSet()->emplace(rid);
   return true;
 }
 
 bool LockManager::Unlock(Transaction *txn, const RID &rid) {
+  std::unique_lock<std::mutex> latch(latch_);
   txn->GetSharedLockSet()->erase(rid);
   txn->GetExclusiveLockSet()->erase(rid);
+  RIDLockState &ridLockState = rid_lock_state_[rid];
+  if (txn->GetState() == TransactionState::GROWING && txn->GetIsolationLevel() == IsolationLevel::REPEATABLE_READ) {
+    txn->SetState(TransactionState::SHRINKING);
+  }
+  std::condition_variable &cond = lock_table_[rid].cv_;
+  if (ridLockState.writer_txn_id_ == txn->GetTransactionId()) {
+    ridLockState.writer_txn_id_ = INVALID_TXN_ID;
+    assert(ridLockState.reader_txn_ids_.empty());
+    // rid_lock_state_.erase(rid);
+    cond.notify_all();
+  } else {
+    ridLockState.reader_txn_ids_.erase(txn->GetTransactionId());
+    if (ridLockState.reader_txn_ids_.empty()) {
+      assert(ridLockState.writer_txn_id_ == INVALID_TXN_ID);
+      // rid_lock_state_.erase(rid);
+      cond.notify_one();
+    }
+  }
+  // TODO(rewindding) 如何删除lock_table_和rid_lock_state_里面的entry？
+  //  if(ridLockState.writer_txn_id_ == INVALID_TXN_ID && ridLockState.reader_txn_ids_.empty()) {
+  //    rid_lock_state_.erase(rid);
+  //    lock_table_.erase(rid);
+  //  }
   return true;
 }
 
-void LockManager::AddEdge(txn_id_t t1, txn_id_t t2) {}
+void LockManager::AddEdge(txn_id_t t1, txn_id_t t2) { waits_for_edges_.insert({t1, t2}); }
 
-void LockManager::RemoveEdge(txn_id_t t1, txn_id_t t2) {}
+void LockManager::RemoveEdge(txn_id_t t1, txn_id_t t2) { waits_for_edges_.erase({t1, t2}); }
 
-bool LockManager::HasCycle(txn_id_t *txn_id) { return false; }
+bool LockManager::HasCycle(txn_id_t *txn_id) {
+  // build a fly graph
+  waits_for_.clear();
+  std::unordered_map<txn_id_t, size_t> outDegree;
+  std::unordered_map<txn_id_t, std::deque<txn_id_t>> reverseEdges;
+  for (const auto &edge : waits_for_edges_) {
+    txn_id_t v1 = edge.first;
+    txn_id_t v2 = edge.second;
+    waits_for_[v1].push_back(v2);
+    reverseEdges[v2].push_back(v1);
+    outDegree[v1]++;
+    if (outDegree.count(v2) == 0U) {
+      outDegree.insert({v2, 0});
+    }
+  }
+  std::deque<txn_id_t> que;
+  for (const auto &vert : outDegree) {
+    if (vert.second == 0) {
+      que.push_back(vert.first);
+    }
+  }
+  // 把所有不带环的节点(out degree[x]==0)剔除
+  while (!que.empty()) {
+    txn_id_t v = que.front();
+    que.pop_front();
+    outDegree.erase(v);
+    for (const txn_id_t &revAdj : reverseEdges[v]) {
+      size_t oDegree = --outDegree[revAdj];
+      if (oDegree == 0U) {
+        que.push_back(revAdj);
+      }
+    }
+  }
+  if (outDegree.empty()) {
+    return false;
+  }
+  // 从在环上的节点中找到youngest txn
+  // txn id最小的就是youngest txn？
+  txn_id_t targetTid = INT_MAX;
+  for (const auto &vert : outDegree) {
+    if (vert.first < targetTid) {
+      targetTid = vert.first;
+    }
+  }
+  *txn_id = targetTid;
+  return true;
+}
 
-std::vector<std::pair<txn_id_t, txn_id_t>> LockManager::GetEdgeList() { return {}; }
+std::vector<std::pair<txn_id_t, txn_id_t>> LockManager::GetEdgeList() {
+  return {waits_for_edges_.begin(), waits_for_edges_.end()};
+}
 
 void LockManager::RunCycleDetection() {
   while (enable_cycle_detection_) {
     std::this_thread::sleep_for(cycle_detection_interval);
     {
       std::unique_lock<std::mutex> l(latch_);
-      // TODO(student): remove the continue and add your cycle detection and abort code here
+      txn_id_t aborted_txn = INVALID_TXN_ID;
+      if (HasCycle(&aborted_txn)) {
+        Transaction *txn = TransactionManager::GetTransaction(aborted_txn);
+        txn->SetState(TransactionState::ABORTED);
+      }
+      // remove the continue and add your cycle detection and abort code here
       continue;
     }
   }
