@@ -15,6 +15,7 @@
 #include <algorithm>
 #include <condition_variable>  // NOLINT
 #include <deque>
+#include <fstream>
 #include <list>
 #include <memory>
 #include <mutex>  // NOLINT
@@ -65,6 +66,8 @@ class LockManager {
   LockManager() {
     enable_cycle_detection_ = true;
     cycle_detection_thread_ = new std::thread(&LockManager::RunCycleDetection, this);
+    cycle_start_ = INVALID_TXN_ID;
+    target_cycle_txn_ = INVALID_TXN_ID;
     LOG_INFO("Cycle detection thread launched");
   }
 
@@ -152,6 +155,13 @@ class LockManager {
   std::set<std::pair<txn_id_t, txn_id_t>> waits_for_edges_;
 
   std::unordered_map<RID, RIDLockState> rid_lock_state_;
+
+  txn_id_t cycle_start_;
+
+  txn_id_t target_cycle_txn_;
+  // state 0:unvisited,1:visited
+  std::unordered_map<txn_id_t, int> vertex_states_;
+  bool Dfs(txn_id_t v);
 };
 
 }  // namespace bustub

@@ -33,6 +33,10 @@ bool LockManager::LockShared(Transaction *txn, const RID &rid) {
   RIDLockState &ridLockState = rid_lock_state_[rid];
   txn->SetState(TransactionState::GROWING);
   if (ridLockState.writer_txn_id_ != INVALID_TXN_ID) {
+    // 当前txn有可能已经获取exclusive lock了。
+    if (ridLockState.writer_txn_id_ == txn->GetTransactionId()) {
+      return true;
+    }
     // add edge 只执行一次
     AddEdge(txn->GetTransactionId(), ridLockState.writer_txn_id_);
     // 插入时记录位置，方便后面删除
@@ -43,7 +47,7 @@ bool LockManager::LockShared(Transaction *txn, const RID &rid) {
     while (ridLockState.writer_txn_id_ != INVALID_TXN_ID) {
       if (txn->GetState() == TransactionState::ABORTED) {
         RemoveEdge(txn->GetTransactionId(), ridLockState.writer_txn_id_);
-        return false;
+        throw TransactionAbortException(txn->GetTransactionId(), AbortReason::DEADLOCK);
       }
       cond.wait_for(latch, cycle_detection_interval);
     }
@@ -89,7 +93,7 @@ bool LockManager::LockExclusive(Transaction *txn, const RID &rid) {
       for (txn_id_t tid : waitedTxns) {
         RemoveEdge(txn->GetTransactionId(), tid);
       }
-      return false;
+      throw TransactionAbortException(txn->GetTransactionId(), AbortReason::DEADLOCK);
     }
     cond.wait_for(latch, cycle_detection_interval);
   }
@@ -99,7 +103,7 @@ bool LockManager::LockExclusive(Transaction *txn, const RID &rid) {
       for (txn_id_t tid : waitedTxns) {
         RemoveEdge(txn->GetTransactionId(), tid);
       }
-      return false;
+      throw TransactionAbortException(txn->GetTransactionId(), AbortReason::DEADLOCK);
     }
     cond.wait_for(latch, cycle_detection_interval);
   }
@@ -156,6 +160,9 @@ bool LockManager::LockUpgrade(Transaction *txn, const RID &rid) {
     }
     cond.wait_for(latch, cycle_detection_interval);
   }
+  for (txn_id_t txnId : waitedTxns) {
+    RemoveEdge(txn->GetTransactionId(), txnId);
+  }
   txn->GetExclusiveLockSet()->emplace(rid);
   return true;
 }
@@ -177,7 +184,7 @@ bool LockManager::Unlock(Transaction *txn, const RID &rid) {
   } else {
     ridLockState.reader_txn_ids_.erase(txn->GetTransactionId());
     if (ridLockState.reader_txn_ids_.empty()) {
-      assert(ridLockState.writer_txn_id_ == INVALID_TXN_ID);
+      // assert(ridLockState.writer_txn_id_ == INVALID_TXN_ID); 这个assertion是错的！
       // rid_lock_state_.erase(rid);
       cond.notify_one();
     }
@@ -197,49 +204,34 @@ void LockManager::RemoveEdge(txn_id_t t1, txn_id_t t2) { waits_for_edges_.erase(
 bool LockManager::HasCycle(txn_id_t *txn_id) {
   // build a fly graph
   waits_for_.clear();
-  std::unordered_map<txn_id_t, size_t> outDegree;
-  std::unordered_map<txn_id_t, std::deque<txn_id_t>> reverseEdges;
+  cycle_start_ = INVALID_TXN_ID;
+  target_cycle_txn_ = INVALID_TXN_ID;
+  std::set<txn_id_t> vertices;
   for (const auto &edge : waits_for_edges_) {
     txn_id_t v1 = edge.first;
     txn_id_t v2 = edge.second;
     waits_for_[v1].push_back(v2);
-    reverseEdges[v2].push_back(v1);
-    outDegree[v1]++;
-    if (outDegree.count(v2) == 0U) {
-      outDegree.insert({v2, 0});
+    vertices.insert(v1);
+    vertices.insert(v2);
+  }
+  for (auto &adjs : waits_for_) {
+    std::sort(adjs.second.begin(), adjs.second.end());
+  }
+  vertex_states_.clear();
+  // set里面取出来的元素是有序的吗？
+  for (txn_id_t v : vertices) {
+    if (vertex_states_[v] == 0) {
+      vertex_states_.clear();
+      Dfs(v);
+    }
+    if (target_cycle_txn_ != INVALID_TXN_ID) {
+      waits_for_.clear();
+      *txn_id = target_cycle_txn_;
+      LOG_INFO("cycle detected,abort txn:%d", *txn_id);
+      return true;
     }
   }
-  std::deque<txn_id_t> que;
-  for (const auto &vert : outDegree) {
-    if (vert.second == 0) {
-      que.push_back(vert.first);
-    }
-  }
-  // 把所有不带环的节点(out degree[x]==0)剔除
-  while (!que.empty()) {
-    txn_id_t v = que.front();
-    que.pop_front();
-    outDegree.erase(v);
-    for (const txn_id_t &revAdj : reverseEdges[v]) {
-      size_t oDegree = --outDegree[revAdj];
-      if (oDegree == 0U) {
-        que.push_back(revAdj);
-      }
-    }
-  }
-  if (outDegree.empty()) {
-    return false;
-  }
-  // 从在环上的节点中找到youngest txn
-  // txn id最小的就是youngest txn？
-  txn_id_t targetTid = INT_MAX;
-  for (const auto &vert : outDegree) {
-    if (vert.first < targetTid) {
-      targetTid = vert.first;
-    }
-  }
-  *txn_id = targetTid;
-  return true;
+  return false;
 }
 
 std::vector<std::pair<txn_id_t, txn_id_t>> LockManager::GetEdgeList() {
@@ -251,6 +243,7 @@ void LockManager::RunCycleDetection() {
     std::this_thread::sleep_for(cycle_detection_interval);
     {
       std::unique_lock<std::mutex> l(latch_);
+      // build Graph here?
       txn_id_t aborted_txn = INVALID_TXN_ID;
       if (HasCycle(&aborted_txn)) {
         Transaction *txn = TransactionManager::GetTransaction(aborted_txn);
@@ -260,6 +253,25 @@ void LockManager::RunCycleDetection() {
       continue;
     }
   }
+}
+
+bool LockManager::Dfs(txn_id_t v) {
+  vertex_states_[v] = 1;
+  for (txn_id_t adj : waits_for_[v]) {
+    if (vertex_states_[adj] > 0) {  // first cycle detected,find the max txn in the cycle
+      // 记录下当前的节点txn_id，作为cycle start，一直return回去
+      cycle_start_ = adj;
+      target_cycle_txn_ = std::max(target_cycle_txn_, v);
+      return true;
+    }
+    bool inCycle = Dfs(adj);
+    if (inCycle) {
+      target_cycle_txn_ = std::max(target_cycle_txn_, v);
+      // tell the prev node whether it's in this cycle
+      return v != cycle_start_;
+    }
+  }
+  return false;
 }
 
 }  // namespace bustub
