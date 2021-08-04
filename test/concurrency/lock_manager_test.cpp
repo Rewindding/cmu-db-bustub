@@ -22,12 +22,7 @@ void CheckGrowing(Transaction *txn) { EXPECT_EQ(txn->GetState(), TransactionStat
 
 void CheckShrinking(Transaction *txn) { EXPECT_EQ(txn->GetState(), TransactionState::SHRINKING); }
 
-void CheckAborted(Transaction *txn) {
-  if (txn->GetState() != TransactionState::ABORTED) {
-    LOG_INFO("");
-  }
-  EXPECT_EQ(txn->GetState(), TransactionState::ABORTED);
-}
+void CheckAborted(Transaction *txn) { EXPECT_EQ(txn->GetState(), TransactionState::ABORTED); }
 
 void CheckCommitted(Transaction *txn) { EXPECT_EQ(txn->GetState(), TransactionState::COMMITTED); }
 
@@ -82,7 +77,7 @@ void BasicTest1() {
     delete txns[i];
   }
 }
-TEST(LockManagerTest, BasicTest) { BasicTest1(); }
+TEST(LockManagerTest, DISABLED_BasicTest) { BasicTest1(); }
 
 void TwoPLTest() {
   LockManager lock_mgr{};
@@ -128,7 +123,7 @@ void TwoPLTest() {
 
   delete txn;
 }
-TEST(LockManagerTest, TwoPLTest) { TwoPLTest(); }
+TEST(LockManagerTest, DISABLED_TwoPLTest) { TwoPLTest(); }
 
 void UpgradeTest() {
   LockManager lock_mgr{};
@@ -155,9 +150,9 @@ void UpgradeTest() {
   txn_mgr.Commit(&txn);
   CheckCommitted(&txn);
 }
-// TEST(LockManagerTest, UpgradeLockTest) { UpgradeTest(); }
+TEST(LockManagerTest, DISABLED_UpgradeLockTest) { UpgradeTest(); }
 
-TEST(LockManagerTest, GraphEdgeTest) {
+TEST(LockManagerTest, DISABLED_GraphEdgeTest) {
   LockManager lock_mgr{};
   TransactionManager txn_mgr{&lock_mgr};
   const int num_nodes = 100;
@@ -199,7 +194,7 @@ TEST(LockManagerTest, GraphEdgeTest) {
   }
 }
 
-TEST(LockManagerTest, BasicCycleTest) {
+TEST(LockManagerTest, DISABLED_BasicCycleTest) {
   LockManager lock_mgr{}; /* Use Deadlock detection */
   TransactionManager txn_mgr{&lock_mgr};
 
@@ -216,7 +211,7 @@ TEST(LockManagerTest, BasicCycleTest) {
   EXPECT_EQ(false, lock_mgr.HasCycle(&txn));
 }
 
-TEST(LockManagerTest, BasicDeadlockDetectionTest) {
+TEST(LockManagerTest, DISABLED_BasicDeadlockDetectionTest) {
   LockManager lock_mgr{};
   cycle_detection_interval = std::chrono::milliseconds(500);
   TransactionManager txn_mgr{&lock_mgr};

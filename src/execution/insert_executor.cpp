@@ -43,11 +43,6 @@ bool InsertExecutor::Next([[maybe_unused]] Tuple *tuple, RID *rid) {
       if (!inserted) {
         return false;
       }
-      if (exec_ctx_->GetTransaction()->IsExclusiveLocked(*rid) &&
-          exec_ctx_->GetTransaction()->GetIsolationLevel() != IsolationLevel::REPEATABLE_READ) {
-        // unlock
-        exec_ctx_->GetLockManager()->Unlock(exec_ctx_->GetTransaction(), *rid);
-      }
     }
     return false;
   }
@@ -55,18 +50,11 @@ bool InsertExecutor::Next([[maybe_unused]] Tuple *tuple, RID *rid) {
   if (!inserted) {
     return false;
   }
-  if (exec_ctx_->GetTransaction()->IsExclusiveLocked(*rid) &&
-      exec_ctx_->GetTransaction()->GetIsolationLevel() != IsolationLevel::REPEATABLE_READ) {
-    // unlock
-    exec_ctx_->GetLockManager()->Unlock(exec_ctx_->GetTransaction(), *rid);
-  }
   // update all index relative to the key
   std::vector<IndexInfo *> indexes = exec_ctx_->GetCatalog()->GetTableIndexes(tableMetadata->name_);
   for (IndexInfo *index : indexes) {
     // 这里的tuple要根据index schema转换
     Tuple indexKey = tuple->KeyFromTuple(tableMetadata->schema_, index->key_schema_, index->index_->GetKeyAttrs());
-    exec_ctx_->GetTransaction()->AppendTableWriteRecord(
-        IndexWriteRecord(*rid, tableOid, WType::INSERT, indexKey, index->index_oid_, exec_ctx_->GetCatalog()));
     index->index_->InsertEntry(indexKey, *rid, exec_ctx_->GetTransaction());
   }
   return true;

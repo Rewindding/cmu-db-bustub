@@ -28,16 +28,10 @@ bool DeleteExecutor::Next([[maybe_unused]] Tuple *tuple, RID *rid) {
   table_oid_t tableOid = plan_->TableOid();
   TableMetadata *tableMetadata = exec_ctx_->GetCatalog()->GetTable(tableOid);
   tableMetadata->table_->MarkDelete(*rid, exec_ctx_->GetTransaction());
-  if (exec_ctx_->GetTransaction()->IsExclusiveLocked(*rid) &&
-      exec_ctx_->GetTransaction()->GetIsolationLevel() != IsolationLevel::REPEATABLE_READ) {
-    exec_ctx_->GetLockManager()->Unlock(exec_ctx_->GetTransaction(), *rid);
-  }
   // delete entry from all relative index
   auto indexes = exec_ctx_->GetCatalog()->GetTableIndexes(tableMetadata->name_);
   for (IndexInfo *index : indexes) {
     Tuple indexKey = tuple->KeyFromTuple(tableMetadata->schema_, index->key_schema_, index->index_->GetKeyAttrs());
-    exec_ctx_->GetTransaction()->AppendTableWriteRecord(
-        IndexWriteRecord(*rid, tableOid, WType::DELETE, indexKey, index->index_oid_, exec_ctx_->GetCatalog()));
     index->index_->DeleteEntry(indexKey, *rid, exec_ctx_->GetTransaction());
   }
   return true;

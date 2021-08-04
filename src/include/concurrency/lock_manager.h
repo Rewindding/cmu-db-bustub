@@ -14,14 +14,10 @@
 
 #include <algorithm>
 #include <condition_variable>  // NOLINT
-#include <deque>
-#include <fstream>
 #include <list>
 #include <memory>
 #include <mutex>  // NOLINT
-#include <set>
 #include <unordered_map>
-#include <unordered_set>
 #include <utility>
 #include <vector>
 
@@ -53,11 +49,6 @@ class LockManager {
     std::condition_variable cv_;  // for notifying blocked transactions on this rid
     bool upgrading_ = false;
   };
-  class RIDLockState {
-   public:
-    txn_id_t writer_txn_id_ = INVALID_TXN_ID;
-    std::unordered_set<txn_id_t> reader_txn_ids_;
-  };
 
  public:
   /**
@@ -66,8 +57,6 @@ class LockManager {
   LockManager() {
     enable_cycle_detection_ = true;
     cycle_detection_thread_ = new std::thread(&LockManager::RunCycleDetection, this);
-    cycle_start_ = INVALID_TXN_ID;
-    target_cycle_txn_ = INVALID_TXN_ID;
     LOG_INFO("Cycle detection thread launched");
   }
 
@@ -150,18 +139,7 @@ class LockManager {
   /** Lock table for lock requests. */
   std::unordered_map<RID, LockRequestQueue> lock_table_;
   /** Waits-for graph representation. */
-  std::unordered_map<txn_id_t, std::deque<txn_id_t>> waits_for_;
-
-  std::set<std::pair<txn_id_t, txn_id_t>> waits_for_edges_;
-
-  std::unordered_map<RID, RIDLockState> rid_lock_state_;
-
-  txn_id_t cycle_start_;
-
-  txn_id_t target_cycle_txn_;
-  // state 0:unvisited,1:visited
-  std::unordered_map<txn_id_t, int> vertex_states_;
-  bool Dfs(txn_id_t v);
+  std::unordered_map<txn_id_t, std::vector<txn_id_t>> waits_for_;
 };
 
 }  // namespace bustub
